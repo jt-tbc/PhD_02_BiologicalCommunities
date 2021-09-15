@@ -1,0 +1,142 @@
+---
+title: "Chapter2_Mesophotic_Communities"
+author: "Joe Turner"
+date: "2 December 2016"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+
+setwd("C:/Users/TUR262/OneDrive/Documents/PhD/PhD_Chapters/Chapter_2_Mesophotic_Communities/Data")
+
+library(plyr)
+library(vegan)
+library(doBy)
+library(rgdal)
+library(clustsig)
+library(gdata)
+library(ggplot2)
+library(scales)
+library(ggrepel)
+library(RColorBrewer)
+library(reshape2)
+library(reshape)
+library(grid)
+library(dplR)
+library(gridExtra)
+library(spsurvey)
+st.err <- function(x) {sd(x)/sqrt(length(x))}
+
+data<-read.csv("All_Images_and_Env_Merge.csv")
+rownames(data)<- data$FILENAME
+
+```
+
+
+Data exploration
+
+```{r exploration}
+
+# Investigate range of depths
+ggplot(data=data, aes(data$Bottom_Depth)) + 
+  geom_histogram(binwidth=5)
+
+# Investigate range of "backscatter"
+ggplot(data=data, aes(data$scatter_converted)) + 
+  geom_histogram()
+
+
+
+```
+
+
+```{r semi variograms}
+
+# emon package code
+
+library(emon)
+?svariog
+
+# if have 10 bins, need to define 11 cut points
+# trial and error to get the bin points correct
+setwd()
+
+sv<-read.csv("epidataNE.csv", header=T, row.names = TRUE)
+long<-sv$long
+lat<-sv$lat
+s<-sv$S
+
+
+plot(long, lat, ylab='', xlab='', xlim=c(min(long), max(long)), 
+     ylim=c(min(lat), max(lat)), col=2, pch=2)
+points(long, lat, pch=3, col=3)
+
+# set values for the bin categories
+u<-c(0.0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.6)
+
+# 2013 semivariogram
+svariog<-svariog(long, lat, s, u)
+
+# can check the frequency in each bin category and adjust as appropriate
+svariog$freq
+
+par(mfrow=c(2,2))
+plot(svariog$dcloud, svariog$zcloud, xlab='Distance', ylab='Cloud')
+plot(svariog$mid, svariog$cla, xlab='Distance', ylab='Classical')
+plot(svariog$mid, svariog$med, xlab='Distance', ylab='Median')
+plot(svariog$mid, svariog$rob, xlab='Distance', ylab='Robust')
+
+
+# Moran Test
+moran.test(data, alternative = "two.sided" )
+
+
+
+# gstat package code  https://www.r-bloggers.com/breaking-the-rules-with-spatial-correlation/
+#import relevant packages
+library(gstat)
+library(sp)
+library(nlme)
+
+lat<-#latitude
+lon<-#longitude
+exp1<-#depth
+exp2<-#light energy
+
+#resp is linear combination of explanatory variables plus an error term that is normally distributed
+resp<- #response variable, coral over? similarity value
+
+#pair plots of variables
+plot(data.frame(resp,exp1,exp2,lat))
+
+#correlation between variables
+cor(data.frame(resp,exp1,exp2,lat))
+
+#get mods, check parameter values with actual, but we don't know spatial correlation with lat
+mod<-lm(resp~exp1+exp2)
+coefficients(summary(mod))
+
+#function for testing parameter values against actual
+t_test<-function(x.bar,mu,se,deg.f,return.t=F){
+  if(return.t) return(round((x.bar-mu)/se,3))
+  pt(abs((x.bar-mu)/se),deg.f,lower.tail=F)*2
+  }
+
+#for first explanatory variable
+t_test(3.8314, 4, 0.2534, 397)
+
+#evidence of spatial correlation using bubble plot
+dat<-data.frame(lon,lat,resids=resid(mod))
+coordinates(dat)<-c('lon','lat')
+bubble(dat,zcol='resids')
+
+#evidence of spatial correlation using variogram
+var.mod<-variogram(resids~1,data=dat,alpha=c(0,45,90,135))
+plot(var.mod)
+
+#refit model with correlation structure
+mod.cor<-gls(resp~exp1+exp2,correlation=corGaus(form=~lat,nugget=TRUE))
+summary(mod.cor)
+
+```
+

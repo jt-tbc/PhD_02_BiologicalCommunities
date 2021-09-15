@@ -1,0 +1,824 @@
+---
+output: pdf_document
+---
+
+"StarBug_2016_Analysis"
+
+R Script to combine all the .txt files from the Transect Measure output for Starbug November 2016 Ningaloo Outlook Field Trip and produce a .csv output file in a format standardized for Margaret Mille. Initial data preperation steps written by Cindy Bessey, 5/5/2015, edited and added to by Joe Turner 23/11/2016.
+
+Prepare TransectMeasure data for analysis
+
+```{r Data set-up, message=FALSE, warning=FALSE}
+
+# 1) Set working directory and load packages
+
+# FOR UWA laptop setwd("C:/Users/21901029/OneDrive/Documents/PhD/Data/Image_Analysis/TransectMeasure")
+
+setwd("C:/Users/TUR262/OneDrive/Documents/PhD/Data/Image_Analysis/TransectMeasure")
+
+library(plyr)
+library(vegan)
+library(doBy)
+library(rgdal)
+library(clustsig)
+library(gdata)
+library(ggplot2)
+library(scales)
+library(ggrepel)
+library(RColorBrewer)
+library(reshape2)
+library(reshape)
+library(grid)
+library(dplR)
+library(gridExtra)
+st.err <- function(x) {sd(x)/sqrt(length(x))}
+
+#2) Make an automatic list of all files present in the directory
+file_list<-list.files()
+
+#3) Combine all the files into a list where each layer contains only the data
+##This requires the first 4 lines of the Transect Measure .txt output to be ignored
+dataset <- lapply (file_list, read.table, sep="\t", header=FALSE, row.names=NULL, skip=5)
+
+#4) Combine the data into a single dataframe
+alldata<-do.call(rbind.fill,dataset)
+
+#5)Standardize the column names
+
+FILENAME<-alldata[,1]
+FRAME<-alldata[,2]
+IMAGE_ROW<-alldata[,4]
+IMAGE_COL<-alldata[,5]
+IMAGE_DATE<-alldata[,6]
+LOCATION<-alldata[,7]
+SITEID<-alldata[,8]
+DEPTH<-alldata[,9]
+OBSERVER<-alldata[,10]
+CONTINUOUS_Y_N<-alldata[,11]
+BROADGROUP<-alldata[,18]
+DESCRIPTION<-alldata[,19]
+FAMILY<-alldata[,20]
+GENUS<-alldata[,21]
+SPECIES<-alldata[,22]
+
+#6) Combine into a final dataframe for output
+final.data<-data.frame(FILENAME,FRAME,IMAGE_ROW,IMAGE_COL,IMAGE_DATE,LOCATION,SITEID,DEPTH,OBSERVER,CONTINUOUS_Y_N,BROADGROUP,DESCRIPTION,FAMILY,GENUS,SPECIES)
+
+#Output a .csv file to the directory where all the .txt files are located
+# write.csv(final.data, file="StarbugImageData2016.csv")
+
+```
+
+Start the data manipulation, statistical analysis and plot generation.
+First load in the data for the images produced in the steps above and the environmental data from the StarBug.
+
+```{r Load Data, message=FALSE, warning=FALSE}
+
+setwd("C:/Users/TUR262/OneDrive/Documents/PhD/Data/Image_Analysis")
+
+imagedata <- read.csv("StarbugImageData2016.csv", header = TRUE)
+metadata <- read.csv("metadata.csv", header = TRUE)
+env <- read.csv("allenvdata.csv", header = TRUE)
+
+```
+
+Produce the species matrix style data and calculate the percentage cover (multiply by 4 as 25 points analysed per image).
+Calculated for each category type.  Broad for hard coral, family for acroporids, description for non-acroporid coral growth forms.
+
+```{r Create % cover matrices, message=FALSE, warning=FALSE}
+
+broad<-cast(imagedata, FILENAME ~ BROADGROUP)
+broadpercent<- broad*4
+broadpercent[,1]<-broad[,1]
+broadpercent[,2]<- NULL
+write.csv(broadpercent, file = "broadpercent.csv")
+
+family<-cast(imagedata, FILENAME ~ FAMILY)
+familypercent<- family*4
+familypercent[,1]<-family[,1]
+familypercent[,2]<- NULL
+write.csv(familypercent, file = "familypercent.csv")
+
+descrip<-cast(imagedata, FILENAME ~ DESCRIPTION)
+descrippercent<- descrip*4
+descrippercent[,1]<-descrip[,1]
+descrippercent[,2]<- NULL
+write.csv(descrippercent, file = "descrippercent.csv")
+
+
+```
+
+
+Line up the image analysis data with the environmental data.
+It may be worth removing the <10m metadata for purposes of making plots as data can be erratic.
+
+```{r Merge image data with environmental data, message=FALSE, warning=FALSE}
+
+metadata$FILENAME<-gsub( " ", "", paste(metadata$FILENAME))
+mergebroad<- merge(broadpercent, metadata, by.x = "FILENAME", by.y = "FILENAME", all.x=TRUE)
+write.csv(mergebroad, file = "mergebroad.csv")
+
+mergefamily<- merge(familypercent, metadata, by.x = "FILENAME", by.y = "FILENAME", all.x=TRUE)
+write.csv(mergefamily, file = "mergefamily.csv")
+
+mergedescrip<- merge(descrippercent, metadata, by.x = "FILENAME", by.y = "FILENAME", all.x=TRUE)
+write.csv(mergedescrip, file = "mergedescrip.csv")
+
+
+metadata<-metadata[metadata$X2m_depth!="<10",]
+
+
+```
+
+\newpage
+Calculating coral cover by Area and 2m depth categories.  This can be done for overall hard coral (using the broad habitat categories).  Graph showing light can also be added and ploted underneath main plot. Light data is smoothed using a GAM method.
+
+```{r Total Coral Cover, message=FALSE, warning=FALSE}
+
+#### For Broad Habitat Categories ####
+
+colnames(mergebroad)[6]<- "Hard_Coral"
+meancoral<-aggregate(Hard_Coral ~ Area + X2m_depth, data = mergebroad, FUN= "mean")
+sdcoral<-aggregate(Hard_Coral ~ Area + X2m_depth, data = mergebroad, FUN= "sd")
+secoral<-aggregate(Hard_Coral ~ Area + X2m_depth, data = mergebroad, st.err)
+light<-aggregate(Energy1_lic ~ Area + X2m_depth, data = metadata, FUN = "mean")
+meancoral[,4]<-sdcoral[,3]
+meancoral[,5]<-secoral[,3]
+colnames(meancoral)[2]<- "Depth"
+colnames(meancoral)[3]<- "Mean_Coral"
+colnames(meancoral)[4]<- "SD_Coral"
+colnames(meancoral)[5]<- "SE_Coral"
+
+
+g1<- ggplot(data=meancoral,aes(x=Depth, y=Mean_Coral, colour=Area)) +
+  geom_line(aes(group = Area), size = 1.5) + 
+  geom_point(size=2) +
+  geom_errorbar(aes(ymin=Mean_Coral-SE_Coral, ymax=Mean_Coral+SE_Coral), width=.1) +
+  xlab("Depth (m)") +
+  ylab("Mean Hard Coral Cover (% ± S.E)") +
+  theme_bw() +
+  scale_y_continuous(expand = c(0, 0), limits = c(0, 65))
+
+g2<-ggplot(env,aes(x = Depth1_lic, y = Energy1_lic, colour = Area)) +
+  geom_smooth(se= FALSE, size = 1) +
+  xlab("Depth (m)") +
+  ylab ("Light Energy") +
+  theme_bw() +
+  scale_y_continuous(expand = c(0, 0)) +
+  scale_x_continuous(expand = c(0, 0), limits = c(10, 50))
+
+grid.newpage()
+grid.draw(rbind(ggplotGrob(g1), ggplotGrob(g2), size = "last"))
+
+```
+
+
+\newpage
+Coral cover by Genera / growth form (as resolution commonly only allows "non-Acropora" identification).
+
+```{r Coral cover by growth form, message=FALSE, warning=FALSE}
+
+#### Acropora ####
+
+meanacrop<-aggregate(Acroporidae ~ X2m_depth, data = mergefamily, FUN= "mean")
+sdacrop<-aggregate(Acroporidae ~ X2m_depth, data = mergefamily, FUN= "sd")
+seacrop<-aggregate(Acroporidae ~ X2m_depth, data = mergefamily, st.err)
+meanacrop[,3]<-sdacrop[,2]
+meanacrop[,4]<-seacrop[,2]
+meanacrop[,5]<-"Acropora"
+colnames(meanacrop)[1]<- "Depth"
+colnames(meanacrop)[2]<- "Mean"
+colnames(meanacrop)[3]<- "SD"
+colnames(meanacrop)[4]<- "SE"
+colnames(meanacrop)[5]<- "Type"
+meanacrop$Type<- as.factor(meanacrop$Type)
+
+#### Encrusting non-Acropora ####
+
+colnames(mergedescrip)[29]<- "Encrusting_Coral"
+meanencrust<-aggregate(Encrusting_Coral ~ X2m_depth, data = mergedescrip, FUN= "mean")
+sdencrust<-aggregate(Encrusting_Coral ~ X2m_depth, data = mergedescrip, FUN= "sd")
+seencrust<-aggregate(Encrusting_Coral ~ X2m_depth, data = mergedescrip, st.err)
+meanencrust[,3]<-sdencrust[,2]
+meanencrust[,4]<-seencrust[,2]
+meanencrust[,5]<-"Encrusting non-Acropora"
+colnames(meanencrust)[1]<- "Depth"
+colnames(meanencrust)[2]<- "Mean"
+colnames(meanencrust)[3]<- "SD"
+colnames(meanencrust)[4]<- "SE"
+colnames(meanencrust)[5]<- "Type"
+meanencrust$Type<- as.factor(meanencrust$Type)
+
+
+#### Foliose non-Acropora ####
+
+colnames(mergedescrip)[31]<- "Foliose_Coral"
+meanfoli<-aggregate(Foliose_Coral ~ X2m_depth, data = mergedescrip, FUN= "mean")
+sdfoli<-aggregate(Foliose_Coral ~ X2m_depth, data = mergedescrip, FUN= "sd")
+sefoli<-aggregate(Foliose_Coral ~ X2m_depth, data = mergedescrip, st.err)
+meanfoli[,3]<-sdfoli[,2]
+meanfoli[,4]<-sefoli[,2]
+meanfoli[,5]<-"Foliose non-Acropora"
+colnames(meanfoli)[1]<- "Depth"
+colnames(meanfoli)[2]<- "Mean"
+colnames(meanfoli)[3]<- "SD"
+colnames(meanfoli)[4]<- "SE"
+colnames(meanfoli)[5]<- "Type"
+meanfoli$Type<- as.factor(meanfoli$Type)
+
+
+#### Massive non-Acropora ####
+
+colnames(mergedescrip)[34]<- "Massive_Coral"
+meanmass<-aggregate(Massive_Coral ~ X2m_depth, data = mergedescrip, FUN= "mean")
+sdmass<-aggregate(Massive_Coral ~ X2m_depth, data = mergedescrip, FUN= "sd")
+semass<-aggregate(Massive_Coral ~ X2m_depth, data = mergedescrip, st.err)
+meanmass[,3]<-sdmass[,2]
+meanmass[,4]<-semass[,2]
+meanmass[,5]<-"Massive non-Acropora"
+colnames(meanmass)[1]<- "Depth"
+colnames(meanmass)[2]<- "Mean"
+colnames(meanmass)[3]<- "SD"
+colnames(meanmass)[4]<- "SE"
+colnames(meanmass)[5]<- "Type"
+meanmass$Type<- as.factor(meanmass$Type)
+
+
+corals<-rbind(meanmass, meanfoli, meanacrop, meanencrust)
+corals[is.na(corals)]<- 0
+
+
+ggplot(data=corals,aes(x=Depth, y=Mean, colour=Type)) +
+  geom_line(aes(group = Type), size = 1.5) + 
+  geom_point(size=2) +
+  geom_errorbar(aes(ymin=Mean-SE, ymax=Mean+SE), width=.1) +
+  xlab("Depth") +
+  ylab("Mean Coral Cover (% ± S.E)") +
+  theme_bw() +
+  scale_y_continuous(expand = c(0, 0), limits = c(0, 20))
+
+
+```
+
+\newpage
+
+It is also possible to investigate sponge and macroalgal abundance with depths.
+
+```{r Sponge and Macroalgae cover, message=FALSE, warning=FALSE}
+
+mergebroad$Sponge <- as.numeric(mergebroad$Sponge)
+mergebroad$Sponges <- as.numeric(mergebroad$Sponges)
+mergebroad$AllSponge <- mergebroad$Sponge + mergebroad$Sponges
+
+meansponge<-aggregate(AllSponge ~ Area + X2m_depth, data = mergebroad, FUN= "mean")
+sdsponge<-aggregate(AllSponge ~ Area + X2m_depth, data = mergebroad, FUN= "sd")
+sesponge<-aggregate(AllSponge ~ Area + X2m_depth, data = mergebroad, st.err)
+meansponge[,4]<-sdsponge[,3]
+meansponge[,5]<-sesponge[,3]
+colnames(meansponge)[2]<- "Depth"
+colnames(meansponge)[3]<- "Mean"
+colnames(meansponge)[4]<- "SD"
+colnames(meansponge)[5]<- "SE"
+
+
+ggplot(data=meansponge,aes(x=Depth, y=Mean, colour=Area)) +
+  geom_line(aes(group = Area), size = 1.5) + 
+  geom_point(size=2) +
+  geom_errorbar(aes(ymin=Mean-SE, ymax=Mean+SE), width=.1) +
+  xlab("Depth (m)") +
+  ylab("Mean Sponge Cover (% ± S.E)") +
+  theme_bw() +
+  scale_y_continuous(expand = c(0, 0), limits = c(0, 15))
+
+
+# Brown Macroalgae
+
+colnames(mergefamily)[7]<- "Brown_Macroalgae"
+meanbmacro<-aggregate(Brown_Macroalgae ~ Area + X2m_depth, data = mergefamily, FUN= "mean")
+sdbmacro<-aggregate(Brown_Macroalgae ~ Area + X2m_depth, data = mergefamily, FUN= "sd")
+sebmacro<-aggregate(Brown_Macroalgae ~ Area + X2m_depth, data = mergefamily, st.err)
+meanbmacro[,4]<-sdbmacro[,3]
+meanbmacro[,5]<-sebmacro[,3]
+colnames(meanbmacro)[2]<- "Depth"
+colnames(meanbmacro)[3]<- "Mean"
+colnames(meanbmacro)[4]<- "SD"
+colnames(meanbmacro)[5]<- "SE"
+
+
+ggplot(data=meanbmacro,aes(x=Depth, y=Mean, colour=Area)) +
+  geom_line(aes(group = Area), size = 1.5) + 
+  geom_point(size=2) +
+  geom_errorbar(aes(ymin=Mean-SE, ymax=Mean+SE), width=.1) +
+  xlab("Depth (m)") +
+  ylab("Mean Brown Macroalgal Cover (% ± S.E)") +
+  theme_bw() +
+  scale_y_continuous(expand = c(0, 0), limits = c(0, 40))
+
+
+# Red Macroalgae
+
+colnames(mergefamily)[26]<- "Red_Macroalgae"
+meanrmacro<-aggregate(Red_Macroalgae ~ Area + X2m_depth, data = mergefamily, FUN= "mean")
+sdrmacro<-aggregate(Red_Macroalgae ~ Area + X2m_depth, data = mergefamily, FUN= "sd")
+sermacro<-aggregate(Red_Macroalgae ~ Area + X2m_depth, data = mergefamily, st.err)
+meanrmacro[,4]<-sdrmacro[,3]
+meanrmacro[,5]<-sermacro[,3]
+colnames(meanrmacro)[2]<- "Depth"
+colnames(meanrmacro)[3]<- "Mean"
+colnames(meanrmacro)[4]<- "SD"
+colnames(meanrmacro)[5]<- "SE"
+
+
+ggplot(data=meanrmacro,aes(x=Depth, y=Mean, colour=Area)) +
+  geom_line(aes(group = Area), size = 1.5) + 
+  geom_point(size=2) +
+  geom_errorbar(aes(ymin=Mean-SE, ymax=Mean+SE), width=.1) +
+  xlab("Depth (m)") +
+  ylab("Mean Red Macroalgal Cover (% ± S.E)") +
+  theme_bw() +
+  scale_y_continuous(expand = c(0, 0), limits = c(0, 25))
+
+
+```
+
+\newpage
+It may be beneficial to remove any images of substrate that is unsuitable for coral.  A threshold amount of Sand can be defined and images removed accordingly. Data can then be analysed as above to produce plots of average coral cover.
+
+```{r, warning = FALSE, message = FALSE}
+
+mergebroadnosand <- mergebroad[mergebroad$Sand<=24,]
+
+# This code will overwrite the mean, sd, and se coral files
+
+meancoral<-aggregate(Hard_Coral ~ Area + X2m_depth, data = mergebroadnosand, FUN= "mean")
+sdcoral<-aggregate(Hard_Coral ~ Area + X2m_depth, data = mergebroadnosand, FUN= "sd")
+secoral<-aggregate(Hard_Coral ~ Area + X2m_depth, data = mergebroadnosand, st.err)
+meancoral[,4]<-sdcoral[,3]
+meancoral[,5]<-secoral[,3]
+colnames(meancoral)[2]<- "Depth"
+colnames(meancoral)[3]<- "Mean_Coral"
+colnames(meancoral)[4]<- "SD_Coral"
+colnames(meancoral)[5]<- "SE_Coral"
+
+
+ggplot(data=meancoral,aes(x=Depth, y=Mean_Coral, colour=Area)) +
+  geom_line(aes(group = Area), size = 1.5) + 
+  geom_point(size=2) +
+  geom_errorbar(aes(ymin=Mean_Coral-SE_Coral, ymax=Mean_Coral+SE_Coral), width=.1) +
+  xlab("Depth (m)") +
+  ylab("Mean Hard Coral Cover (% ± S.E)") +
+  theme_bw() +
+  scale_y_continuous(expand = c(0, 0), limits = c(0, 65))
+
+
+```
+
+
+\newpage
+Environmental data plots including light, temperature and oxygen saturation.
+
+```{r, warning = FALSE}
+
+lightplot<- ggplot(env,aes(x = Depth1_lic, y = Energy1_lic, colour = Area)) +
+  geom_smooth(se= FALSE, size = 1) +
+  xlab("Depth (m)") +
+  ylab ("Light Energy (E m-2 s-1)") +
+  theme_bw() +
+  scale_y_continuous(expand = c(0, 0)) +
+  scale_x_continuous(expand = c(0, 0), limits = c(0,50)) +
+  theme(axis.title.x = element_blank(), axis.text.x = element_blank())
+
+
+tempplot<- ggplot(env,aes(x = Depth1_ctd, y = Temp_ctd, colour = Area)) +
+  geom_smooth(se= FALSE, size = 1) +
+  xlab("Depth (m)") +
+  ylab ("Temperature (°C)") +
+  theme_bw() +
+  scale_y_continuous(expand = c(0, 0), limits = c(23, 24.5)) +
+  scale_x_continuous(expand = c(0, 0), limits = c(0,50)) +
+  theme(axis.title.x = element_blank(), axis.text.x = element_blank()) 
+
+
+oxyplot<- ggplot(env,aes(x = Depth_opt , y = Saturation_opt, colour = Area)) +
+  geom_smooth(se= FALSE, size = 1) +
+  xlab("Depth (m)") +
+  ylab ("Oxygen Saturation (%)") +
+  theme_bw() +
+  scale_y_continuous(expand = c(0, 0), limits=c(75,95)) +
+  scale_x_continuous(expand = c(0, 0), limits = c(0,50))  
+
+
+grid.arrange(lightplot, tempplot, oxyplot, nrow = 3)
+
+```
+
+
+\newpage
+
+Investigating differences between 5m depth bins instead of 2m.
+
+```{r 5m Analysis, warning = FALSE, message = FALSE}
+
+# Total Hard Coral Cover
+
+meancoral<-aggregate(Hard_Coral ~ Area + X5m_depth, data = mergebroad, FUN= "mean")
+sdcoral<-aggregate(Hard_Coral ~ Area + X5m_depth, data = mergebroad, FUN= "sd")
+secoral<-aggregate(Hard_Coral ~ Area + X5m_depth, data = mergebroad, st.err)
+light<-aggregate(Energy1_lic ~ Area + X5m_depth, data = metadata, FUN = "mean")
+meancoral[,4]<-sdcoral[,3]
+meancoral[,5]<-secoral[,3]
+colnames(meancoral)[2]<- "Depth"
+colnames(meancoral)[3]<- "Mean_Coral"
+colnames(meancoral)[4]<- "SD_Coral"
+colnames(meancoral)[5]<- "SE_Coral"
+
+
+ggplot(data=meancoral,aes(x=Depth, y=Mean_Coral, colour=Area)) +
+  geom_line(aes(group = Area), size = 1.5) + 
+  geom_point(size=2) +
+  geom_errorbar(aes(ymin=Mean_Coral-SE_Coral, ymax=Mean_Coral+SE_Coral), width=.1) +
+  xlab("Depth (m)") +
+  ylab("Mean Hard Coral Cover (% ± S.E)") +
+  theme_bw() +
+  scale_y_continuous(expand = c(0, 0), limits = c(0, 65))
+
+#### Acropora ####
+
+meanacrop<-aggregate(Acroporidae ~ X5m_depth, data = mergefamily, FUN= "mean")
+sdacrop<-aggregate(Acroporidae ~ X5m_depth, data = mergefamily, FUN= "sd")
+seacrop<-aggregate(Acroporidae ~ X5m_depth, data = mergefamily, st.err)
+meanacrop[,3]<-sdacrop[,2]
+meanacrop[,4]<-seacrop[,2]
+meanacrop[,5]<-"Acropora"
+colnames(meanacrop)[1]<- "Depth"
+colnames(meanacrop)[2]<- "Mean"
+colnames(meanacrop)[3]<- "SD"
+colnames(meanacrop)[4]<- "SE"
+colnames(meanacrop)[5]<- "Type"
+meanacrop$Type<- as.factor(meanacrop$Type)
+
+#### Encrusting non-Acropora ####
+
+colnames(mergedescrip)[29]<- "Encrusting_Coral"
+meanencrust<-aggregate(Encrusting_Coral ~ X5m_depth, data = mergedescrip, FUN= "mean")
+sdencrust<-aggregate(Encrusting_Coral ~ X5m_depth, data = mergedescrip, FUN= "sd")
+seencrust<-aggregate(Encrusting_Coral ~ X5m_depth, data = mergedescrip, st.err)
+meanencrust[,3]<-sdencrust[,2]
+meanencrust[,4]<-seencrust[,2]
+meanencrust[,5]<-"Encrusting non-Acropora"
+colnames(meanencrust)[1]<- "Depth"
+colnames(meanencrust)[2]<- "Mean"
+colnames(meanencrust)[3]<- "SD"
+colnames(meanencrust)[4]<- "SE"
+colnames(meanencrust)[5]<- "Type"
+meanencrust$Type<- as.factor(meanencrust$Type)
+
+
+#### Foliose non-Acropora ####
+
+colnames(mergedescrip)[31]<- "Foliose_Coral"
+meanfoli<-aggregate(Foliose_Coral ~ X5m_depth, data = mergedescrip, FUN= "mean")
+sdfoli<-aggregate(Foliose_Coral ~ X5m_depth, data = mergedescrip, FUN= "sd")
+sefoli<-aggregate(Foliose_Coral ~ X5m_depth, data = mergedescrip, st.err)
+meanfoli[,3]<-sdfoli[,2]
+meanfoli[,4]<-sefoli[,2]
+meanfoli[,5]<-"Foliose non-Acropora"
+colnames(meanfoli)[1]<- "Depth"
+colnames(meanfoli)[2]<- "Mean"
+colnames(meanfoli)[3]<- "SD"
+colnames(meanfoli)[4]<- "SE"
+colnames(meanfoli)[5]<- "Type"
+meanfoli$Type<- as.factor(meanfoli$Type)
+
+
+#### Massive non-Acropora ####
+
+colnames(mergedescrip)[34]<- "Massive_Coral"
+meanmass<-aggregate(Massive_Coral ~ X5m_depth, data = mergedescrip, FUN= "mean")
+sdmass<-aggregate(Massive_Coral ~ X5m_depth, data = mergedescrip, FUN= "sd")
+semass<-aggregate(Massive_Coral ~ X5m_depth, data = mergedescrip, st.err)
+meanmass[,3]<-sdmass[,2]
+meanmass[,4]<-semass[,2]
+meanmass[,5]<-"Massive non-Acropora"
+colnames(meanmass)[1]<- "Depth"
+colnames(meanmass)[2]<- "Mean"
+colnames(meanmass)[3]<- "SD"
+colnames(meanmass)[4]<- "SE"
+colnames(meanmass)[5]<- "Type"
+meanmass$Type<- as.factor(meanmass$Type)
+
+
+corals<-rbind(meanmass, meanfoli, meanacrop, meanencrust)
+corals[is.na(corals)]<- 0
+
+
+ggplot(data=corals,aes(x=Depth, y=Mean, colour=Type)) +
+  geom_line(aes(group = Type), size = 1.5) + 
+  geom_point(size=2) +
+  geom_errorbar(aes(ymin=Mean-SE, ymax=Mean+SE), width=.1) +
+  xlab("Depth") +
+  ylab("Mean Coral Cover (% ± S.E)") +
+  theme_bw() +
+  scale_y_continuous(expand = c(0, 0), limits = c(0, 20))
+
+# Sponges
+
+meansponge<-aggregate(AllSponge ~ Area + X5m_depth, data = mergebroad, FUN= "mean")
+sdsponge<-aggregate(AllSponge ~ Area + X5m_depth, data = mergebroad, FUN= "sd")
+sesponge<-aggregate(AllSponge ~ Area + X5m_depth, data = mergebroad, st.err)
+meansponge[,4]<-sdsponge[,3]
+meansponge[,5]<-sesponge[,3]
+colnames(meansponge)[2]<- "Depth"
+colnames(meansponge)[3]<- "Mean"
+colnames(meansponge)[4]<- "SD"
+colnames(meansponge)[5]<- "SE"
+
+
+ggplot(data=meansponge,aes(x=Depth, y=Mean, colour=Area)) +
+  geom_line(aes(group = Area), size = 1.5) + 
+  geom_point(size=2) +
+  geom_errorbar(aes(ymin=Mean-SE, ymax=Mean+SE), width=.1) +
+  xlab("Depth (m)") +
+  ylab("Mean Sponge Cover (% ± S.E)") +
+  theme_bw() +
+  scale_y_continuous(expand = c(0, 0), limits = c(0, 15))
+
+
+# Brown Macroalgae
+
+colnames(mergefamily)[7]<- "Brown_Macroalgae"
+meanbmacro<-aggregate(Brown_Macroalgae ~ Area + X5m_depth, data = mergefamily, FUN= "mean")
+sdbmacro<-aggregate(Brown_Macroalgae ~ Area + X5m_depth, data = mergefamily, FUN= "sd")
+sebmacro<-aggregate(Brown_Macroalgae ~ Area + X5m_depth, data = mergefamily, st.err)
+meanbmacro[,4]<-sdbmacro[,3]
+meanbmacro[,5]<-sebmacro[,3]
+colnames(meanbmacro)[2]<- "Depth"
+colnames(meanbmacro)[3]<- "Mean"
+colnames(meanbmacro)[4]<- "SD"
+colnames(meanbmacro)[5]<- "SE"
+
+
+ggplot(data=meanbmacro,aes(x=Depth, y=Mean, colour=Area)) +
+  geom_line(aes(group = Area), size = 1.5) + 
+  geom_point(size=2) +
+  geom_errorbar(aes(ymin=Mean-SE, ymax=Mean+SE), width=.1) +
+  xlab("Depth (m)") +
+  ylab("Mean Brown Macroalgal Cover (% ± S.E)") +
+  theme_bw() +
+  scale_y_continuous(expand = c(0, 0), limits = c(0, 40))
+
+
+# Red Macroalgae
+
+colnames(mergefamily)[26]<- "Red_Macroalgae"
+meanrmacro<-aggregate(Red_Macroalgae ~ Area + X5m_depth, data = mergefamily, FUN= "mean")
+sdrmacro<-aggregate(Red_Macroalgae ~ Area + X5m_depth, data = mergefamily, FUN= "sd")
+sermacro<-aggregate(Red_Macroalgae ~ Area + X5m_depth, data = mergefamily, st.err)
+meanrmacro[,4]<-sdrmacro[,3]
+meanrmacro[,5]<-sermacro[,3]
+colnames(meanrmacro)[2]<- "Depth"
+colnames(meanrmacro)[3]<- "Mean"
+colnames(meanrmacro)[4]<- "SD"
+colnames(meanrmacro)[5]<- "SE"
+
+
+ggplot(data=meanrmacro,aes(x=Depth, y=Mean, colour=Area)) +
+  geom_line(aes(group = Area), size = 1.5) + 
+  geom_point(size=2) +
+  geom_errorbar(aes(ymin=Mean-SE, ymax=Mean+SE), width=.1) +
+  xlab("Depth (m)") +
+  ylab("Mean Red Macroalgal Cover (% ± S.E)") +
+  theme_bw() +
+  scale_y_continuous(expand = c(0, 0), limits = c(0, 25))
+
+
+```
+
+
+
+\newpage
+
+Statistical Tests. First investigate the data
+
+```{r}
+
+# mergebroad$Hard_Coral <- as.numeric(mergebroad$Hard_Coral)
+# ggplot(data=mergebroad, aes(mergebroad$Hard_Coral)) + 
+  # geom_histogram()
+# Obvious Poisson distribution
+
+# anova(Hard_Coral ~ Area + 2m_Depth, data = mergebroad)
+
+
+# BIOENV
+
+# data<-mergebroad[c(2:6,8:13)]
+# rownames(data) <- mergebroad[,1]
+# envdata<-mergebroad[c(23,39,40,42,43,44,49,57,58,66,67,68)]
+# rownames(envdata) <- mergebroad[,1]
+
+# x<- bioenv(data, envdata, method = "spearman", index = "bray")
+# bioenvdist(x, which = "best")
+
+
+
+# data2<-mergefamily[c(2:14,16:33)]
+# rownames(data2) <- mergefamily[,1]
+# x2<- bioenv(data2, envdata, method = "spearman", index = "bray")
+
+
+
+
+# Multi Dimensional Scaling
+
+
+
+
+```
+
+
+```{r USBL data}
+
+library(lubridate)
+library(zoo)
+
+setwd("C:/Users/TUR262/OneDrive/Documents/PhD/PhD_Chapters/Chapter_2_Mesophotic_Communities/Data/USBL")
+
+file_list<-list.files(pattern="*.txt")
+
+    DF <- NULL
+        for (f in file_list) {
+        dat <- read.table(f, header=T, sep=",", colClasses = "character")
+        dat$site<- rep(paste(f), nrow(dat))
+        DF <- rbind(DF, dat)
+        }
+    
+unique<- subset(DF, !duplicated(Easting))
+
+write.csv(unique, file = "USBL_Unique.csv")
+write.csv(DF, file = "USBL_All_Sites.csv")
+write.table(unique, file = "USBL_Unique.txt", sep= ",", row.names=FALSE)
+
+unique$date <- ifelse(unique$site== "hb01_fs.txt", "20161102",
+        ifelse(unique$site== "hb01_fs.txt", "20161102",
+        ifelse(unique$site== "hb02_2nd.txt", "20161102",
+        ifelse(unique$site== "hb03.txt", "20161102",
+        ifelse(unique$site== "hb04.txt", "20161102",
+        ifelse(unique$site== "mg01.txt", "20161104",
+        ifelse(unique$site== "mg02.txt", "20161104",
+        ifelse(unique$site== "mg03.txt", "20161104",
+        ifelse(unique$site== "tb01.txt" & unique$Msg.Time > 42677.33329, "20161103",
+        ifelse(unique$site== "tb01.txt" & unique$Msg.Time < 42677.33329, "20161102",      
+        ifelse(unique$site== "tb02.txt", "20161103",
+        ifelse(unique$site== "tb03.txt", "20161103",
+        ifelse(unique$site== "mu01.txt", "20161104",
+        ifelse(unique$site== "mu02.txt", "20161104",
+        ifelse(unique$site== "mu03.txt", "20161104",
+                        NA  ))))))))))))))) 
+
+unique$Time <- as.POSIXct(paste(unique$date, unique$UTC.Time), format="%Y%m%d %H%M%S", tz = "UTC")
+unique$Local_Time<- unique$Time + hours(9)
+
+write.csv(unique, file = "USBL_Unique.csv")
+
+setwd("C:/Users/TUR262/OneDrive/Documents/PhD/PhD_Chapters/Chapter_2_Mesophotic_Communities/Data")
+images<-read.csv("All_Images_and_Env_Merge.csv", header = T)
+images$Local_Time <- as.POSIXct(images$Date_Time.1, format="%Y%m%d %H%M%S", tz = "Asia/Tokyo") # 9 hour difference
+images$UTC.Time <- with_tz(images$Local_Time, tz = "UTC")
+
+write.csv(images, file = "images.csv")
+
+merge<-merge(unique, images, by.x = "Time", by.y = "UTC.Time")
+merge[c(2:3, 7:8, 10)] <- list(NULL)
+write.csv(merge, file = "merge.csv")
+
+
+# Interpolate http://stackoverflow.com/questions/26806140/interpolate-coordinates-at-unrecorded-timestamps
+# Need to do for each site seperately
+# Below is linear
+
+hb01_fs<- subset(unique, site == "hb01_fs.txt")
+full.time    <- with(hb01_fs,seq(Time[1],tail(Time,1),by=1))
+df.zoo <- zoo(hb01_fs[,3:4],hb01_fs$Time)        # convert to zoo object
+resulthb01 <- na.approx(df.zoo,xout=full.time)  # interpolate; result is also a zoo object
+head(resulthb01)
+
+hb02_2nd<- subset(unique, site == "hb02_2nd.txt")
+full.time    <- with(hb02_2nd,seq(Time[1],tail(Time,1),by=1))
+df.zoo <- zoo(hb02_2nd[,3:4],hb02_2nd$Time)        # convert to zoo object
+resulthb02 <- na.approx(df.zoo,xout=full.time)  # interpolate; result is also a zoo object
+head(resulthb02)
+
+hb03<- subset(unique, site == "hb03.txt")
+full.time    <- with(hb03,seq(Time[1],tail(Time,1),by=1))
+df.zoo <- zoo(hb03[,3:4],hb03$Time)        # convert to zoo object
+resulthb03 <- na.approx(df.zoo,xout=full.time)  # interpolate; result is also a zoo object
+head(resulthb03)
+
+hb04<- subset(unique, site == "hb04.txt")
+full.time    <- with(hb04,seq(Time[1],tail(Time,1),by=1))
+df.zoo <- zoo(hb04[,3:4],hb04$Time)        # convert to zoo object
+resulthb04 <- na.approx(df.zoo,xout=full.time)  # interpolate; result is also a zoo object
+head(resulthb04)
+
+mg01<- subset(unique, site == "mg01.txt")
+full.time    <- with(mg01,seq(Time[1],tail(Time,1),by=1))
+df.zoo <- zoo(mg01[,3:4],mg01$Time)        # convert to zoo object
+resultmg01 <- na.approx(df.zoo,xout=full.time)  # interpolate; result is also a zoo object
+head(resultmg01)
+
+mg02<- subset(unique, site == "mg02.txt")
+full.time    <- with(mg02,seq(Time[1],tail(Time,1),by=1))
+df.zoo <- zoo(mg02[,3:4],mg02$Time)        # convert to zoo object
+resultmg02 <- na.approx(df.zoo,xout=full.time)  # interpolate; result is also a zoo object
+head(resultmg02)
+
+mg03<- subset(unique, site == "mg03.txt")
+full.time    <- with(mg03,seq(Time[1],tail(Time,1),by=1))
+df.zoo <- zoo(mg03[,3:4],mg03$Time)        # convert to zoo object
+resultmg03 <- na.approx(df.zoo,xout=full.time)  # interpolate; result is also a zoo object
+head(resultmg03)
+
+mu01<- subset(unique, site == "mu01.txt")
+full.time    <- with(mu01,seq(Time[1],tail(Time,1),by=1))
+df.zoo <- zoo(mu01[,3:4],mu01$Time)        # convert to zoo object
+resultmu01 <- na.approx(df.zoo,xout=full.time)  # interpolate; result is also a zoo object
+head(resultmu01)
+
+mu02<- subset(unique, site == "mu02.txt")
+full.time    <- with(mu02,seq(Time[1],tail(Time,1),by=1))
+df.zoo <- zoo(mu02[,3:4],mu02$Time)        # convert to zoo object
+resultmu02 <- na.approx(df.zoo,xout=full.time)  # interpolate; result is also a zoo object
+head(resultmu02)
+
+mu03<- subset(unique, site == "mu03.txt")
+full.time    <- with(mu03,seq(Time[1],tail(Time,1),by=1))
+df.zoo <- zoo(mu03[,3:4],mu03$Time)        # convert to zoo object
+resultmu03 <- na.approx(df.zoo,xout=full.time)  # interpolate; result is also a zoo object
+head(resultmu03)
+
+tb01<- subset(unique, site == "tb01.txt")
+full.time    <- with(tb01,seq(Time[1],tail(Time,1),by=1))
+df.zoo <- zoo(tb01[,3:4],tb01$Time)        # convert to zoo object
+resulttb01 <- na.approx(df.zoo,xout=full.time)  # interpolate; result is also a zoo object
+head(resulttb01)
+
+tb02<- subset(unique, site == "tb02.txt")
+full.time    <- with(tb02,seq(Time[1],tail(Time,1),by=1))
+df.zoo <- zoo(tb02[,3:4],tb02$Time)        # convert to zoo object
+resulttb02 <- na.approx(df.zoo,xout=full.time)  # interpolate; result is also a zoo object
+head(resulttb02)
+
+tb03<- subset(unique, site == "tb03.txt")
+full.time    <- with(tb03,seq(Time[1],tail(Time,1),by=1))
+df.zoo <- zoo(tb03[,3:4],tb03$Time)        # convert to zoo object
+resulttb03 <- na.approx(df.zoo,xout=full.time)  # interpolate; result is also a zoo object
+head(resulttb03)
+
+
+setwd("C:/Users/TUR262/OneDrive/Documents/PhD/PhD_Chapters/Chapter_2_Mesophotic_Communities/Data/USBL/Interpolated")
+write.zoo(resulthb01, file = "hb01_fs_Interpolation.txt")
+write.zoo(resulthb02, file = "hb02_2nd_Interpolation.txt")
+write.zoo(resulthb03, file = "hb03_Interpolation.txt")
+write.zoo(resulthb04, file = "hb04_Interpolation.txt")
+write.zoo(resultmg01, file = "mg01_Interpolation.txt")
+write.zoo(resultmg02, file = "mg02_Interpolation.txt")
+write.zoo(resultmg03, file = "mg03_Interpolation.txt")
+write.zoo(resultmu01, file = "mu01_Interpolation.txt")
+write.zoo(resultmu02, file = "mu02_Interpolation.txt")
+write.zoo(resultmu03, file = "mu03_Interpolation.txt")
+write.zoo(resulttb01, file = "tb01_Interpolation.txt")
+write.zoo(resulttb02, file = "tb02_Interpolation.txt")
+write.zoo(resulttb03, file = "tb03_Interpolation.txt")
+
+temp <- list.files(pattern="*.txt")
+    Interp <- NULL
+        for (f in temp) {
+        dat <- read.csv(f, header=F, sep=" ", colClasses = "character")
+        dat$site<- rep(paste(f), nrow(dat))
+        Interp <- rbind(Interp, dat)
+        }
+    
+colnames(Interp)<-c("Date", "Time", "Easting", "Northing", "Site")
+Interp<-Interp[ which( ! Interp$Date %in% "Index") , ]
+Interp$Date<- as.factor(Interp$Date)
+Interp$Time<- as.factor(Interp$Time)
+Interp$UTC_Time <- as.POSIXct(paste(Interp$Date, Interp$Time), format="%Y-%m-%d %H:%M:%S", "UTC")
+write.csv(Interp, "Interp_All_Sites.csv")
+
+merge<-merge(Interp, images, by.x = "UTC_Time", by.y = "UTC.Time")
+merge[c(2:3, 6:10)] <- list(NULL)
+
+setwd("C:/Users/TUR262/OneDrive/Documents/PhD/PhD_Chapters/Chapter_2_Mesophotic_Communities/Data")
+write.csv(merge, file = "merge.csv")
+helbybanks<- subset(merge, Area == "Helby Banks")
+othersites<- subset(merge, Area != "Helby Banks")
+write.csv(helbybanks, file = "Helby_Banks_Sites_Image_Merge_UTM50S.csv")
+write.csv(othersites, file = "Other_Sites_Image_Merge_UTM49S.csv")
+
+
+# Polynomial interpolation of coordinates in r 
+splinefun()
+
+```
+

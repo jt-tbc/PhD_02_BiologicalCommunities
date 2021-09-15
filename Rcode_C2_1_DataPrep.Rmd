@@ -1,0 +1,239 @@
+---
+title: "C2_1_DataPrep"
+author: "Joe Turner"
+date: "11 May 2017"
+output: pdf_document
+---
+
+```{r}
+
+###############################################
+## INITIAL DATA SET-UP FROM TRANSECT MEASURE ##
+###############################################
+
+
+# 1) Set working directory and load packages
+
+setwd("C:/OneDrive/C2_Coms/IMAGES/Random_Section_30_sec/all_sites_results")
+
+library(plyr)
+library(vegan)
+library(doBy)
+library(rgdal)
+library(clustsig)
+library(gdata)
+library(ggplot2)
+library(scales)
+library(ggrepel)
+library(RColorBrewer)
+library(reshape2)
+library(reshape)
+library(grid)
+library(dplR)
+library(gridExtra)
+library(ecodist)
+library(pvclust)
+library(mclust)
+library(factoextra)
+library(NbClust)
+library(cluster)
+st.err <- function(x) {sd(x)/sqrt(length(x))}
+
+
+#2) Make an automatic list of all files present in the directory
+file_list<-list.files()
+
+#3) Combine all the files into a list where each layer contains only the data
+##This requires the first 4 lines of the Transect Measure .txt output to be ignored
+dataset <- lapply(file_list, read.table, sep="\t", header=FALSE, row.names=NULL, skip=5)
+
+#4) Combine the data into a single dataframe
+alldata<-do.call(rbind.fill,dataset)
+
+#5)Standardize the column names
+
+FILENAME<-alldata[,1]
+FRAME<-alldata[,2]
+IMAGE_ROW<-alldata[,4]
+IMAGE_COL<-alldata[,5]
+IMAGE_DATE<-alldata[,6]
+LOCATION<-alldata[,7]
+SITEID<-alldata[,8]
+DEPTH<-alldata[,9]
+OBSERVER<-alldata[,10]
+CONTINUOUS_Y_N<-alldata[,11]
+OVERVIEW<-alldata[,18]
+DESCRIPTION<-alldata[,19]
+BROAD<-alldata[,20]
+MORPHOLOGY<-alldata[,21]
+DETAIL<-alldata[,22]
+
+#6) Combine into a final dataframe for output
+final.data<-data.frame(FILENAME,IMAGE_ROW,IMAGE_COL,IMAGE_DATE,LOCATION,SITEID,OBSERVER,OVERVIEW,DESCRIPTION,BROAD,MORPHOLOGY,DETAIL)
+
+setwd("C:/OneDrive/C2_Coms")
+#Output a .csv file to the directory where all the .txt files are located
+# write.csv(final.data, file="1_Species_Data.csv")
+
+```
+
+
+
+
+```{r Create % cover matrices, message=FALSE, warning=FALSE}
+
+setwd("C:/OneDrive/C2_Coms")
+
+imagedata <- read.csv("1_Species_Data.csv", header = TRUE)
+metadata <- read.csv("2_Environmental_Data_Images.csv", header = TRUE, row.names = 1)
+env <- read.csv("3_Selected_Images_Environmental_Data.csv", header = TRUE, row.names = 1)
+
+########################################################
+# CREATE % COVER MATRICES FOR EACH LEVEL OF CATEGORIES #
+########################################################
+
+broad<- cast(imagedata, FILENAME ~ Broad) # re structures the data based on the FILENAME column by the FINAL habitat categories
+rownames(broad)<-broad[,1] # changes filename to row name
+broad$FILENAME<- NULL #removes old filename column
+broadpercent<- broad/25 # divide by 25 for %
+# write.csv(broadpercent, file = "4_Broad_Category_Percent_Matrix.csv")
+
+morph <- cast(imagedata, FILENAME ~ Morphology) # can re-do for different levels of habitat category
+rownames(morph)<-morph[,1]
+morph$FILENAME<- NULL 
+morphpercent<- morph/25
+# write.csv(morphpercent, file = "5_Morphology_Category_Percent_Matrix.csv")
+
+detailpercent <- read.csv("6_Detail_Category_Percent_Matrix.csv", row.names = 1)
+# Detail would not work in this way for some reason so did manually via pivot tables in Excel
+
+
+
+################################################
+## MERGE WITH ENVRIONMENTAL DATA FROM STARBUG ##
+################################################
+
+## metadata$FILENAME<-gsub( " ", "", paste(metadata$FILENAME))
+
+metadata$FILENAME<-rownames(metadata)
+merge_broad<- merge(broadpercent, metadata, by.x = 0, by.y = 0, all.x=TRUE)
+# write.csv(merge, file = "7_Broad_Data_With_Environmental_Data.csv")
+
+merge_morph<- merge(morphpercent, metadata, by.x = 0, by.y = 0, all.x=TRUE)
+# write.csv(merge_morph, file = "8_Morphology_Data_With_Environmental_Data.csv")
+
+merge_detail<- merge(detailpercent, metadata, by.x = 0, by.y = 0, all.x=TRUE)
+# write.csv(merge_detail, file = "9_Detail_Data_With_Environmental_Data.csv")
+
+```
+
+
+
+
+
+```{r}
+
+##############################################
+#### MERGE IMOS ENVIRONMENTAL INFORMATION ####
+##############################################
+
+setwd("C:/OneDrive/C2_Coms/IMOS_Env_Data/txtfiles/CTD")
+file_list<-list.files()
+dataset <- lapply(file_list, read.table, sep=",", header=TRUE, row.names=NULL)
+alldata<-do.call(rbind.fill,dataset)
+
+setwd("C:/OneDrive/C2_Coms/IMOS_Env_Data/txtfiles/ECO")
+file_list2<-list.files()
+dataset2 <- lapply(file_list2, read.table, sep=",", header=TRUE, row.names=NULL)
+alldata2<-do.call(rbind.fill,dataset2)
+
+setwd("C:/OneDrive/C2_Coms")
+IMOSCTD <- read.csv("16_IMOS_CTD_Data.csv", header = TRUE)
+IMOSECO <- read.csv("17_IMOS_ECO_Data.csv", header = TRUE)
+
+
+IMOSECO$DateTime <- alldata2$TIME
+IMOSCTD$DateTime <- alldata$TIME
+
+IMOSenv <- merge(IMOSCTD, IMOSECO, by.x = "DateTime", by.y = "DateTime", all.x=TRUE)
+# write.csv(IMOSenv, file = "18_IMOS_All_Environmental_Data.csv")
+
+# edit file to add time + 1 second and merge again as some gaps in the ECO data
+
+IMOSenv <- read.csv("18_IMOS_All_Environmental_Data.csv", header = TRUE)
+
+
+#########################################
+#### MERGE IMOS ENV DATA WITH IMAGES ####
+#########################################
+
+IMOSimages <- read.csv("19_IMOS_Image_Data.csv", header = TRUE, stringsAsFactors = FALSE)
+IMOSmerge <- merge(IMOSimages, IMOSenv, by.x = "DATETIME", by.y = "DATETIME", all.x=TRUE)
+
+# merge again as a few gaps, take the reading a second after
+IMOSmerge <- merge(IMOSmerge, IMOSenv, by.x = "DATETIME", by.y = "DATETIMEPLUS1", all.x=TRUE)
+
+write.csv(IMOSmerge, "20_IMOSmerge.csv")
+
+# tidy up manually
+# combine with Ningaloo Outlook data
+# Saved file "21_ALL_IMAGES_and_ENV_COMBINED.csv"
+
+```
+
+
+
+
+```{r MERGE USBL COORDINATES}
+
+library(lubridate)
+library(zoo)
+
+setwd("C:/OneDrive/C2_Coms")
+
+USBL <- read.csv("StarBug_2016_FINAL_Image_USBL_Env_Data.csv", header = TRUE)
+data <- read.csv("23_AllDataCombined_ForFigures.csv", header = TRUE)
+
+# Set date and time
+USBL$DATETIME <- as.POSIXct(paste(USBL$Date, USBL$Time), format="%d/%m/%Y %H:%M:%S")
+data$DATETIME <- as.POSIXct(paste(data$Date, data$Time), format="%d/%m/%Y %H:%M:%S")
+# merge by date and time
+merge <- merge(data, USBL, by.x = "DATETIME", by.y = "DATETIME", all.x = T)
+# add 1 second, then merge again (did not actually fill in any gapt, TB02 missing)
+merge$DATETIME1 <- merge$DATETIME + 1
+merge2 <- merge(merge, USBL, by.x = "DATETIME1", by.y = "DATETIME", all.x = T)
+# write to file
+write.csv(merge2, file = "USBL_AllData_MERGE.csv")
+
+# do the same for the NoSubstrate data, merge by filename
+nosubstrate <- read.csv("24_NS_AllDataCombined_ForFigures.csv", header = T)
+USBLedit <- read.csv("27_USBL_AllData_MERGE.csv", header = T)
+merge3 <- merge(nosubstrate, USBLedit, by.x = "FILENAME", by.y = "FILENAME", all.x = T)
+write.csv(merge3, file = "USBL_NoSubstrate_Merge.csv")
+
+# merge to get community groups in the all data, fill in for "no biota" in Excel
+groups <- as.data.frame(nosubstrate[,c(1,59:72)])
+merge4 <- merge(USBLedit, groups, by.x = "FILENAME", by.y = "FILENAME", all.x = T)
+merge4[,35:46][is.na(merge4[,35:46])] <- 0
+library(car)
+merge4[,c(34,47)] <- lapply(merge4[,c(34,47)], recode, "NA ='No Biota'")
+# write.csv(merge4, file = "29_FINAL_AllData_USBL_CommunityGroups.csv")
+
+
+#merge both GIS spreadsheets with detail groups
+
+detail <- read.csv("20_DETAIL_NOSubstrate_MERGE_Matrix.csv", header = T)
+GIS <- read.csv("30_AllData_GIS_Export.csv", header = T)
+GIS_NoBlanks <- read.csv("31_AllData_GIS_Export_NoBlanks.csv", header = T)
+
+merge5 <- merge(GIS, detail, by.x = "FILENAME", by.y = "X", all.x = T)
+merge5[,78:100][is.na(merge5[,78:100])] <- 0
+
+merge6 <- merge(GIS_NoBlanks, detail, by.x = "FILENAME", by.y = "X", all.x = T)
+merge6[,78:100][is.na(merge6[,78:100])] <- 0
+
+# write.csv(merge5, "30_AllData_GIS_Export.csv")
+# write.csv(merge6, "31_AllData_GIS_Export_NoBlanks.csv")
+
+```
+

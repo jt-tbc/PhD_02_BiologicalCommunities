@@ -1,0 +1,1298 @@
+---
+title: "C2_3_Figures"
+author: "Joe Turner"
+date: "11 May 2017"
+output: pdf_document
+---
+
+
+```{r}
+
+library(plyr)
+library(vegan)
+library(doBy)
+library(rgdal)
+library(clustsig)
+library(gdata)
+library(ggplot2)
+library(scales)
+library(ggrepel)
+library(RColorBrewer)
+library(reshape2)
+library(reshape)
+library(grid)
+library(dplR)
+library(gridExtra)
+library(ecodist)
+library(pvclust)
+library(mclust)
+library(factoextra)
+library(NbClust)
+library(cluster)
+library(dplyr)
+library(reshape2)
+st.err <- function(x) {sd(x)/sqrt(length(x))}
+
+```
+
+
+```{r FIGURE: Plot substrate by depth}
+
+####################################
+## TOTAL BROAD SUBSTRATE BY DEPTH ##
+####################################
+
+setwd("C:/OneDrive/C2_Coms")
+alldata <- read.csv("23_AllDataCombined_ForFigures.csv", header = T, row.names = 1)
+
+
+# https://www.r-bloggers.com/reshape-and-aggregate-data-with-the-r-package-reshape2/
+# https://www3.nd.edu/~steve/computing_with_data/24_dplyr/dplyr.html
+
+
+summary <- alldata %>% group_by(depth_10mEDIT) %>% summarise(mean(Hard.Coral),mean(Brown.Macroalgae), mean(Red.Macroalgae),
+                                                  mean(Green.Macroalgae), mean(Soft.Coral), mean(Sponges), mean(NPFF),
+                                                  mean(Rock), mean(Pebble...Gravel), mean(Sand...Mud))
+colnames(summary)<- c("Depth", "Hard Coral", "Brown Macroalgae", "Red Macroalgae", "Green Macroalgae", "Soft Coral", "Sponges",
+                      "Other Filter Feeders","Rock", "Pebbles / Gravel", "Sand")
+
+
+stack <- cbind(summary[1], stack(lapply(summary[2:11], as.character)))
+colnames(stack)<- c("Depth", "PCover", "Habitat")
+stack$PCover <- as.numeric(stack$PCover)
+stack$Habitat <- factor(stack$Habitat, levels = c("Hard Coral", "Brown Macroalgae", "Red Macroalgae", "Green Macroalgae", 
+                                                  "Soft Coral", "Sponges", "Other Filter Feeders","Rock", 
+                                                  "Pebbles / Gravel", "Sand"))
+
+stack$Depth <- factor(stack$Depth, levels = c("80 +", "70 - 80", "60 - 70" , "50 - 60", "40 - 50", 
+                                              "30 - 40", "20 - 30","<20"))
+
+
+# Figure of % cover substrate and major biota by 10m depth category
+Fig2<- ggplot(stack, aes(x=Depth, y = PCover, fill = Habitat)) +
+        geom_bar(stat = "identity") +
+        theme(panel.grid.minor=element_blank(),
+        panel.grid.major=element_blank()) +
+        labs(x = "Depth (m)", y = "Percent Cover") +
+        theme(axis.title.x = element_text(face="bold")) +
+        theme(axis.title.y = element_text(face="bold")) +
+        scale_fill_brewer(palette="PuOr", direction = -1) +
+        guides(fill = guide_legend(reverse=FALSE, title= NULL))+ 
+        coord_flip() +
+        scale_y_continuous(position = "right")
+
+
+
+setwd("C:/OneDrive/C2_Coms/FIGURES")
+png(file = paste('Fig2_BroadSubstrate_Depth2.png', sep = ''), 
+            width = 8, height = 4, units = 'in', res = 300)
+Fig2
+dev.off()
+
+setwd("C:/OneDrive/C2_Coms/SUBMISSION/Figures")
+tiff(file = "Figure_2_Broad_Benthic_Cover.tif", width = 8, height = 4, units = 'in', res = 500, compression = 'none')
+Fig2
+dev.off()
+
+        
+```
+
+
+```{r Tables: SUMMARISE CLUSTERS}
+
+#########################
+## Summary of Clusters ##
+#########################
+
+setwd("C:/OneDrive/C2_Coms")
+alldata <- read.csv("24_NS_AllDataCombined_ForFigures.csv", header = T, row.names = 1)
+
+# https://www.r-bloggers.com/reshape-and-aggregate-data-with-the-r-package-reshape2/
+# https://www3.nd.edu/~steve/computing_with_data/24_dplyr/dplyr.html
+
+# for kMeans = 12
+summary <- alldata %>% group_by(detailM12) %>% summarise(mean(X1_BM),mean(X2_GM), mean(X3_HC),
+                                                  mean(X4_RM), mean(X5_SC),mean(X6_SPON), mean(X7_NPFF),
+                                                  mean(Bottom_Depth), min(Bottom_Depth), max(Bottom_Depth),
+                                                  mean(H), mean(TEMP), mean(PSAL), mean(CPHL), mean(CDOM),
+                                                  mean(Oxygen_opt), mean(Saturation_opt),
+                                                  mean(Sand), mean(Pebble_Gravel), mean(Rock))
+colnames(summary)<- c("Cluster", "Brown Macroalgae", "Green Macroalgae", "Hard Coral", "Red Macroalgae", 
+                      "Soft Coral","Sponges", "Nonphotosynthetic Filter Feeders","Mean Depth", "Min Depth", "Max Depth",
+                      "Diversity (H')","Temperature", "Salinity", "Chlorophyll", "CDOM", "Oxygen", "Saturation",
+                      "Sand", "Pebble/Gravel", "Rock")
+summary$Sand <- summary$Sand * 100
+summary$`Pebble/Gravel` <- summary$`Pebble/Gravel` * 100 
+summary$Rock <- summary$Rock * 100
+summary <- lapply(summary, round, 1)
+
+setwd("C:/OneDrive/C2_Coms/FIGURES")
+write.csv(summary, "1_kMeans_12_Overall_Summary_env.csv")
+
+
+# for kMeans = 6
+summary <- alldata %>% group_by(detailM6) %>% summarise(mean(X1_BM),mean(X2_GM), mean(X3_HC),
+                                                  mean(X4_RM), mean(X5_SC),mean(X6_SPON), mean(X7_NPFF),
+                                                  mean(Bottom_Depth), min(Bottom_Depth), max(Bottom_Depth),
+                                                  mean(Sand), mean(Pebble_Gravel), mean(Rock))
+colnames(summary)<- c("Cluster", "Brown Macroalgae", "Green Macroalgae", "Hard Coral", "Red Macroalgae", 
+                      "Soft Coral","Sponges", "Nonphotosynthetic Filter Feeders","Mean Depth", "Min Depth", "Max Depth",
+                      "Sand", "Pebble/Gravel", "Rock")
+summary$Sand <- summary$Sand * 100
+summary$`Pebble/Gravel` <- summary$`Pebble/Gravel` * 100
+summary$Rock <- summary$Rock * 100
+summary <- lapply(summary, round, 1)
+
+
+setwd("C:/OneDrive/C2_Coms/FIGURES")
+write.csv(summary, "2_kMeans_6_Overall_Summary.csv")
+
+
+
+setwd("C:/OneDrive/C2_Coms")
+alldata <- read.csv("24_NS_AllDataCombined_ForFigures.csv", header = T, row.names = 1)
+
+# https://www.r-bloggers.com/reshape-and-aggregate-data-with-the-r-package-reshape2/
+# https://www3.nd.edu/~steve/computing_with_data/24_dplyr/dplyr.html
+
+# for kMeans = 12
+summary <- alldata %>% group_by(CLUSTER_DEEP) %>% summarise(mean(X1_BM),mean(X2_GM), mean(X3_HC),
+                                                  mean(X4_RM), mean(X5_SC),mean(X6_SPON), mean(X7_NPFF),
+                                                  mean(Bottom_Depth), min(Bottom_Depth), max(Bottom_Depth),
+                                                  mean(H), mean(TEMP), mean(PSAL), mean(CPHL), mean(CDOM),
+                                                  mean(Oxygen_opt), mean(Saturation_opt),
+                                                  mean(Sand), mean(Pebble_Gravel), mean(Rock))
+colnames(summary)<- c("Cluster", "Brown Macroalgae", "Green Macroalgae", "Hard Coral", "Red Macroalgae", 
+                      "Soft Coral","Sponges", "Nonphotosynthetic Filter Feeders","Mean Depth", "Min Depth", "Max Depth",
+                      "Diversity (H')","Temperature", "Salinity", "Chlorophyll", "CDOM", "Oxygen", "Saturation",
+                      "Sand", "Pebble/Gravel", "Rock")
+summary$Sand <- summary$Sand * 100
+summary$`Pebble/Gravel` <- summary$`Pebble/Gravel` * 100 
+summary$Rock <- summary$Rock * 100
+summary <- lapply(summary, round, 1)
+
+setwd("C:/OneDrive/C2_Coms/FIGURES")
+write.csv(summary, "3_DEEP_CLUSTERS_Overall_Summary_env.csv")
+        
+```
+
+
+```{r MDS Plots}
+
+setwd("C:/OneDrive/C2_Coms")
+clust <- read.csv("26_NS_AllDataCombined_ForFigures.csv", header = TRUE, row.names = 1)
+
+# Define factors
+sites<- clust$Site
+areas <- clust$Area
+depths10 <- clust$depth_10mEDIT
+broad5 <- clust$broadM5
+broad5 <- as.factor(broad5)
+broad17 <- clust$broadM17
+broad17 <- as.factor(broad17)
+broadsim50 <- clust$sim50_B_MERGE
+detail6 <- clust$detailM6
+detail6 <- as.factor(detail6)
+detail12 <- clust$detailM12
+detail12 <- as.factor(detail12)
+
+# Colours and Shapes
+# cols <- c('lightskyblue1','cyan1', 'cyan4','royalblue1', 'royalblue3','dodgerblue3', 'blue', 'blue4','navyblue', 'black')
+cols <- c('red','orange', 'green4','cyan', 'blue', 'magenta')
+shps <- c(15, 16, 17, 18, 0, 1, 2)
+
+plot(MDS_M2$points, type='n', xlim = c(-0.1,0.2), ylim = c(-0.2,0.2)) # plot without anything in it
+points(MDS_M2, col = cols[detail6], pch = 16)
+legend('topright', col = cols, legend = levels(detail6), pch = 16, cex = 1)
+
+cols2 <- c('darkviolet','green', 'red3','orangered', 'orange', 'pink','darkblue','blue', 'magenta', 'green4', 'cyan',
+           'yellow2')
+plot(MDS_M2$points, type='n', xlim = c(-0.1,0.2), ylim = c(-0.2,0.2)) # plot without anything in it
+points(MDS_M2, col = cols2[detail12], pch = 16)
+legend('topright', col = cols2, legend = levels(detail12), pch = 16, cex = 1)
+
+
+# Save plot to file
+setwd("C:/OneDrive/C2_Coms/FIGURES")
+png(file = paste('Fig5_MDS_kMeans12.png', sep = ''), 
+            width = 8, height = 6, units = 'in', res = 300)
+plot(MDS_M2$points, type='n', xlim = c(-0.1,0.2), ylim = c(-0.2,0.2)) # plot without anything in it
+points(MDS_M2, col = cols2[detail12], pch = 16)
+legend('topright', col = cols2, legend = levels(detail12), pch = 16, cex = 1)
+dev.off()
+
+setwd("C:/OneDrive/C2_Coms/FIGURES")
+png(file = paste('Fig3_MDS_kMeans6.png', sep = ''), 
+            width = 8, height = 6, units = 'in', res = 300)
+plot(MDS_M2$points, type='n', xlim = c(-0.1,0.2), ylim = c(-0.2,0.2)) # plot without anything in it
+points(MDS_M2, col = cols[detail6], pch = 16)
+legend('topright', col = cols, legend = levels(detail6), pch = 16, cex = 1)
+dev.off()
+
+
+
+
+
+# Stressplot
+stressplot(MDS)
+gof <- goodness(MDS)
+plot(MDS, type = "t", main = "goodness of fit")
+points(MDS, display = "sites", cex = gof*100)
+
+# Fit environmental variables to MDS
+fit <- envfit(MDS ~ BottomDepth, data = clust, scale = T)
+fit
+plot(MDS$points, type='n') # plot without anything in it
+points(MDS, col=cols[depths10], pch = shps[areas])
+legend('topright', col=cols, legend = levels(depths10), pch = 16, cex = 1)
+legend('bottomright', legend = levels(areas), pch = shps, cex = 1)
+plot(fit, p.max = 0.05, cex = 1.25, col = "red")
+
+
+envNS <- read.csv("21_ALL_IMAGES_and_ENV_COMBINED.csv", header = TRUE, row.names = 1)
+
+clustNS <- read.csv("14_All_Data_CLUSTER_information.csv", header = TRUE, row.names = 1)
+
+
+```
+
+
+```{r kMeans CLUSTERS VISUALISATION}
+
+set.seed(3)
+library(fpc)
+library(ggplot2)
+
+kclust <- kmeans(detailM,12, nstart = 100)
+kclust$cluster <- as.factor(kclust$cluster)
+d <- dist(detailM, method = "euclidean") 
+fit <- cmdscale(d,eig=TRUE, k=2) # k is the number of dim
+
+fig6 <- ggplot(detailM, aes(fit$points[,1], fit$points[,2], color =  factor(kclust$cluster))) +
+          theme(axis.title.y = element_text(size = rel(1.5), angle = 90)) +
+          theme(axis.title.x = element_text(size = rel(1.5), angle = 00)) +
+          theme_bw() +
+          labs(x = "Dim1 (47.8 %)", y = "Dim2 (9.5 %)") +
+          theme(axis.text=element_text(size=10,angle=90),axis.title=element_text(size=10,face="bold")) + 
+          geom_point(size=2) + 
+          theme(legend.text = element_text(size = 10, colour = "black")) + 
+          theme(panel.grid.minor=element_blank(),
+                panel.grid.major=element_blank()) +
+          guides(fill = guide_legend(reverse=FALSE, title= NULL)) +
+          scale_color_manual(values= c("#9900CC", "#66FF00", "#CC0000", "#CC6600", "#FF9900", "#FF99CC",
+                                       "#000066", "#0000FF", "#CC0099", "#009900", "#66FFFF", "#FFFF00")) +
+          theme(legend.title=element_blank())
+
+setwd("C:/OneDrive/C2_Coms/FIGURES")
+png(file = paste('Fig6_kMeans12_Clusters.png', sep = ''), 
+            width = 6, height = 6, units = 'in', res = 300)
+fig6
+dev.off()
+
+setwd("C:/OneDrive/C2_Coms/FIGURES")
+png(file = paste('Fig8_kMeans12_Clusters_fviz_noelipse.png'), 
+            width = 6, height = 6, units = 'in', res = 300)
+fviz_cluster(Dcluster12, data = detailM, 
+             geom = "point", pointsize = 2, 
+             palette = c("#9900CC", "#66FF00", "#CC0000", "#CC6600", "#FF9900", "#FF99CC",
+                         "#000066", "#0000FF", "#CC0099", "#009900", "#66FFFF", "#FFFF00"),
+             stand = FALSE, ellipse = FALSE, 
+             show.clust.cent = FALSE,
+             ggtheme = theme_bw(), 
+             main = FALSE, 
+             shape = 16, 
+             outlier.color = "black", outlier.shape = 19)
+dev.off()
+
+setwd("C:/OneDrive/C2_Coms/FIGURES")
+png(file = paste('Fig7_kMeans12_Clusters_fviz.png'), 
+            width = 6, height = 6, units = 'in', res = 300)
+fviz_cluster(Dcluster12, data = detailM, 
+             geom = "point", pointsize = 1, 
+             palette = c("#9900CC", "#66FF00", "#CC0000", "#CC6600", "#FF9900", "#FF99CC",
+                         "#000066", "#0000FF", "#CC0099", "#009900", "#66FFFF", "#FFFF00"),
+             stand = FALSE, ellipse = TRUE, 
+             show.clust.cent = FALSE,
+             ggtheme = theme_bw(), 
+             main = FALSE, 
+             shape = 16, 
+             outlier.color = "black", outlier.shape = 19)
+dev.off()
+
+
+################
+## Using ADE4 ##
+################
+
+library(ade4)
+library(factoextra)
+
+setwd("C:/OneDrive/C2_Coms")
+alldata <- read.csv("24_NS_AllDataCombined_ForFigures.csv", header = T, row.names = 1)
+detail <- read.csv("20_DETAIL_NOSubstrate_MERGE_Matrix.csv", header = T, row.names = 1)
+
+
+
+
+```
+
+
+```{r CLUSTERS v Env Variables}
+
+####################################
+## Average by CLUSTER Summaries ##
+####################################
+
+setwd("C:/OneDrive/C2_Coms")
+alldata <- read.csv("24_NS_AllDataCombined_ForFigures.csv", header = T, row.names = 1)
+
+
+# https://www.r-bloggers.com/reshape-and-aggregate-data-with-the-r-package-reshape2/
+# https://www3.nd.edu/~steve/computing_with_data/24_dplyr/dplyr.html
+
+alldata$CLUSTER <- as.factor(alldata$CLUSTER)
+ClusterSum <- alldata %>% group_by(CLUSTER) %>% summarise(mean(Bottom_Depth, na.rm = TRUE), sd(Bottom_Depth, na.rm = TRUE),
+                                                      mean(TEMP, na.rm = TRUE), sd(TEMP, na.rm = TRUE),
+                                                       mean(Saturation_opt, na.rm = TRUE), sd(Saturation_opt, na.rm = TRUE),
+                                                       mean(Oxygen_opt, na.rm = TRUE),
+                                                       mean(CDOM, na.rm = TRUE), mean(CPHL, na.rm = TRUE),
+                                                  mean(Rock, na.rm = TRUE), mean(Pebble_Gravel, na.rm = TRUE), 
+                                                  mean(Sand, na.rm = TRUE))
+colnames(ClusterSum)<- c("Cluster" ,"Depth", "sd_Depth", "Temperature", "sd_Temp", "Saturation", "sd_Saturation",
+                      "Oxygen", "CDOM", "Chlorophyll-a", 
+                      "Rock", "Pebbles / Gravel", "Sand")
+
+ClusterSum$Group <- c("Coral", "CCA", "Macro / FF","Macro / FF", "Macro / FF", "Coral","CCA", "CCA","Coral",
+                   "CCA", "CCA", "Macro / FF")
+
+ClusterSum$GroupClust <- c("Coral: 1", "CCA: 2", "Macro / FF: 3","Macro / FF: 4", "Macro / FF: 5", "Coral: 6","CCA: 7",
+                           "CCA: 8","Coral: 9", "CCA: 10", "CCA: 11", "Macro / FF: 12")
+ClusterSum$Order <- c("10", "8","1","2","3","12","5","6","11","7","9","4")
+ClusterSum$Order <- factor(ClusterSum$Order,levels = c("1","2","3","4","5","6","7","8","9","10","11","12"))
+
+
+# Figure of variable, TEMP v cluster
+
+ggplot(ClusterSum, aes(x=GroupClust, y = Temperature, colour = Group)) +
+        geom_point(size = 5) +
+        geom_text(aes(label = Cluster), hjust = -1.5) +
+        theme(panel.grid.minor=element_blank(),panel.grid.major=element_blank()) +
+        labs(y = "Average Temperature (°C)") +
+        theme(axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank()) +
+        theme(axis.title.y = element_text(face="bold")) +
+        guides(fill = guide_legend(reverse=FALSE, title= NULL)) +
+        scale_colour_manual(values = c("#009900", "#0000FF", "#660000", "#003300", "#FF0000")) +
+        guides(colour = guide_legend(override.aes = list(size = 5)))+
+        theme(legend.key=element_rect(fill=NA)) +
+        geom_errorbar(aes(ymin= Temperature - sd_Temp, ymax= Temperature + sd_Temp), width=.2,position=position_dodge(.9))
+
+
+
+
+#####################
+## BY DEEP_CLUSTER ##
+#####################
+
+setwd("C:/OneDrive/C2_Coms")
+alldata <- read.csv("24_NS_AllDataCombined_ForFigures.csv", header = T, row.names = 1)
+alldata$Rock <- alldata$Rock * 100
+alldata$Sand <- alldata$Sand * 100
+
+DeepClustSum <- alldata %>% group_by(CLUSTER_DEEP) %>% summarise(mean(Bottom_Depth, na.rm = TRUE), 
+                                                                 sd(Bottom_Depth, na.rm = TRUE),
+                                                      mean(TEMP, na.rm = TRUE), sd(TEMP, na.rm = TRUE),
+                                                       mean(Saturation_opt, na.rm = TRUE), sd(Saturation_opt, na.rm = TRUE),
+                                                       mean(Oxygen_opt, na.rm = TRUE),
+                                                       mean(CDOM, na.rm = TRUE), mean(CPHL, na.rm = TRUE),
+                                                  mean(Rock, na.rm = TRUE), sd(Rock, na.rm = TRUE),
+                                                  mean(Pebble_Gravel, na.rm = TRUE), 
+                                                  mean(Sand, na.rm = TRUE), sd(Sand, na.rm = TRUE))
+colnames(DeepClustSum)<- c("Cluster" ,"Depth", "sd_Depth", "Temperature", "sd_Temp", "Saturation", "sd_Saturation",
+                      "Oxygen", "CDOM", "Chlorophyll-a", 
+                      "Rock", "sd_Rock", "Pebbles / Gravel", "Sand", "sd_Sand")
+
+DeepClustSum$Group <- c("Coral", "CCA", "Deep: Sponge", "CCA", "Macro / FF", "Deep: FF", "CCA", "Macro / FF", "Macro / FF", 
+                   "Macro / FF", "Coral", "CCA", "CCA", "Coral")
+
+DeepClustSum$GroupClust <- c("Coral: 1", "CCA: 10", "Deep Sponge: 10b", "CCA: 11", "Macro / FF: 12", "Deep FF: 12b", 
+                             "CCA: 2", "Macro / FF: 3", "Macro / FF: 4", 
+                   "Macro / FF: 5", "Coral: 6", "CCA: 7", "CCA: 8", "Coral: 9")
+
+DeepClustSum$Order <- as.numeric(c("12","9", "1", "11", "6", "2","10","3","4","5","14","7","8","13"))
+
+RockStErr <- with(alldata, tapply(Rock, CLUSTER_DEEP, sd)/sqrt(summary(alldata$CLUSTER_DEEP)))
+DeepClustSum$se_Rock <- RockStErr
+SandStErr <- with(alldata, tapply(Sand, CLUSTER_DEEP, sd)/sqrt(summary(alldata$CLUSTER_DEEP)))
+DeepClustSum$se_Sand <- SandStErr
+TempStErr <- with(alldata, tapply(TEMP, CLUSTER_DEEP, sd)/sqrt(summary(alldata$CLUSTER_DEEP)))
+DeepClustSum$se_Temp <- TempStErr
+SaturationStErr <- with(alldata, tapply(Saturation_opt, CLUSTER, sd, na.rm = TRUE)/sqrt(summary(alldata$CLUSTER)))
+ClusterSum$se_Saturation <- SaturationStErr
+DepthStErr <- with(alldata, tapply(Bottom_Depth, CLUSTER_DEEP, sd)/sqrt(summary(alldata$CLUSTER_DEEP)))
+DeepClustSum$se_Depth <- DepthStErr
+
+Sand <- ggplot(DeepClustSum, aes(x=GroupClust, y = Sand, colour = Group)) +
+            geom_point(size = 3) +
+            geom_text(aes(label = Cluster), hjust = -0.7, size = 5) +
+            theme_bw()+
+            ylim(0,100) +
+            theme(panel.grid.minor=element_blank()) +
+            labs(y = "Sand Cover (%) ± S.E") +
+            theme(axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank()) +
+            theme(axis.title.y = element_text(face="bold")) +
+            guides(fill = guide_legend(reverse=FALSE, title= NULL)) +
+            scale_colour_manual(values = c("#009900", "#0000FF", "#660000", "#003300", "#FF0000")) +
+            geom_errorbar(aes(ymin= Sand - se_Sand, ymax= Sand + se_Sand), 
+                          width=.2,position=position_dodge(.9), show.legend = F)+
+            theme(legend.title=element_blank()) +
+            guides(colour = guide_legend(override.aes = list(size = 10, shape = 15)))
+
+setwd("C:/OneDrive/C2_Coms/FIGURES")
+png(file = paste('DeepClust_Sand_Plot.png', sep = ''), 
+            width = 12, height = 4, units = 'in', res = 300)
+Sand
+dev.off()
+
+
+Rock <- ggplot(DeepClustSum, aes(x=GroupClust, y = Rock, colour = Group)) +
+            geom_point(size = 3) +
+            geom_text(aes(label = Cluster), hjust = -0.7, size = 5) +
+            theme_bw()+
+            ylim(0,80) +
+            theme(panel.grid.minor=element_blank()) +
+            labs(y = "Rock Cover (%) ± S.E") +
+            theme(axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank()) +
+            theme(axis.title.y = element_text(face="bold")) +
+            guides(fill = guide_legend(reverse=FALSE, title= NULL)) +
+            scale_colour_manual(values = c("#009900", "#0000FF", "#660000", "#003300", "#FF0000")) +
+            geom_errorbar(aes(ymin= Rock - se_Rock, ymax= Rock + se_Rock), 
+                          width=.2,position=position_dodge(.9), show.legend = F)+
+            theme(legend.title=element_blank()) +
+            guides(colour = guide_legend(override.aes = list(size = 10, shape = 15)))
+
+setwd("C:/OneDrive/C2_Coms/FIGURES")
+png(file = paste('DeepClust_Rock_Plot.png', sep = ''), 
+            width = 12, height = 4, units = 'in', res = 300)
+Rock
+dev.off()
+
+
+Depth <- ggplot(DeepClustSum, aes(x=GroupClust, y = Depth, colour = Group)) +
+            geom_point(size = 3) +
+            geom_text(aes(label = Cluster), hjust = -0.7, size = 5) +
+            theme_bw()+
+            theme(panel.grid.minor=element_blank()) +
+            labs(y = "Average Depth (m) ± S.E") +
+            theme(axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank()) +
+            theme(axis.title.y = element_text(face="bold")) +
+            guides(fill = guide_legend(reverse=FALSE, title= NULL)) +
+            scale_colour_manual(values = c("#009900", "#0000FF", "#660000", "#003300", "#FF0000")) +
+            geom_errorbar(aes(ymin= Depth - se_Depth, ymax= Depth + se_Depth), 
+                          width=.2,position=position_dodge(.9), show.legend = F)+
+            theme(legend.title=element_blank()) +
+            guides(colour = guide_legend(override.aes = list(size = 10, shape = 15)))
+
+setwd("C:/OneDrive/C2_Coms/FIGURES")
+png(file = paste('DeepClust_Depth_Plot.png', sep = ''), 
+            width = 12, height = 4, units = 'in', res = 300)
+Depth
+dev.off()
+
+
+
+Temp <- ggplot(DeepClustSum, aes(x=GroupClust, y = Temperature, colour = Group)) +
+          geom_point(size = 3) +
+          geom_text(aes(label = Cluster), hjust = -0.7, size = 5) +
+          theme_bw()+
+          ylim(23,27) +
+          theme(panel.grid.minor=element_blank()) +
+          labs(y = "Mean Temperature (°C) ± S.E") +
+          theme(axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank()) +
+          theme(axis.title.y = element_text(face="bold")) +
+          guides(fill = guide_legend(reverse=FALSE, title= NULL)) +
+          scale_colour_manual(values = c("#009900", "#0000FF", "#660000", "#003300", "#FF0000")) +
+          guides(colour = guide_legend(override.aes = list(size = 5)))+
+          theme(legend.key=element_rect(fill=NA)) +
+          geom_errorbar(aes(ymin= Temperature - se_Temp, ymax= Temperature + se_Temp), width=.2,position=position_dodge(.9))+
+          theme(legend.title=element_blank()) +
+          guides(colour = guide_legend(override.aes = list(size = 10, shape = 15)))
+
+setwd("C:/OneDrive/C2_Coms/FIGURES")
+png(file = paste('DeepClust_Temperature_Plot.png', sep = ''), 
+            width = 12, height = 4, units = 'in', res = 300)
+Temp
+dev.off()
+
+
+Saturation <- ggplot(ClusterSum, aes(x=GroupClust, y = Saturation, colour = Group)) +
+                geom_point(size = 3) +
+                geom_text(aes(label = Cluster), hjust = -0.7, size = 5) +
+                theme_bw()+
+                theme(panel.grid.minor=element_blank()) +
+                labs(y = "Mean Oxygen Saturation (%) ± S.E") +
+                theme(axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank()) +
+                theme(axis.title.y = element_text(face="bold")) +
+                guides(fill = guide_legend(reverse=FALSE, title= NULL)) +
+                scale_colour_manual(values = c("#009900", "#0000FF", "#FF0000")) +
+                guides(colour = guide_legend(override.aes = list(size = 5)))+
+                theme(legend.key=element_rect(fill=NA)) +
+                geom_errorbar(aes(ymin= Saturation - se_Saturation, ymax= Saturation + se_Saturation),
+                              width=.2,position=position_dodge(.9))+
+                theme(legend.title=element_blank()) +
+                guides(colour = guide_legend(override.aes = list(size = 10, shape = 15)))
+
+setwd("C:/OneDrive/C2_Coms/FIGURES")
+png(file = paste('DeepClust_Saturation_Plot.png', sep = ''), 
+            width = 12, height = 4, units = 'in', res = 300)
+Saturation
+dev.off()
+
+
+```
+
+
+```{r by DEPTH}
+
+#####################
+## BY DEEP_CLUSTER ##
+#####################
+
+setwd("C:/OneDrive/C2_Coms")
+alldata <- read.csv("24_NS_AllDataCombined_ForFigures.csv", header = T, row.names = 1)
+alldata$Rock <- alldata$Rock * 100
+alldata$Sand <- alldata$Sand * 100
+
+DepthSum <- alldata %>% group_by(depth_10mEDIT) %>% summarise(mean(TEMP, na.rm = TRUE), sd(TEMP, na.rm = TRUE),
+                                                       mean(Saturation_opt, na.rm = TRUE), sd(Saturation_opt, na.rm = TRUE),
+                                                       mean(Oxygen_opt, na.rm = TRUE),
+                                                       mean(CDOM, na.rm = TRUE), mean(CPHL, na.rm = TRUE),
+                                                  mean(Rock, na.rm = TRUE), sd(Rock, na.rm = TRUE),
+                                                  mean(Pebble_Gravel, na.rm = TRUE), 
+                                                  mean(Sand, na.rm = TRUE), sd(Sand, na.rm = TRUE),
+                                                  mean(X1_BM_D), sd(X1_BM_D), mean(X2_BM_FB), sd(X2_BM_FB),	
+                                                  mean(X3_BM_FIL), sd(X3_BM_FIL), mean(X4_BM_O), sd(X4_BM_O),
+                                                  mean(X5_RM_MEM), sd(X5_RM_MEM), mean(X6_RM_FB), sd(X6_RM_FB),
+                                                  mean(X7_RM_FIL), sd(X7_RM_FIL), mean(X8_RM_CCA), sd(X8_RM_CCA),
+                                                  mean(X9_GM), sd(X9_GM), mean(X10_HC_ACR), sd(X10_HC_ACR),
+                                                  mean(X11_HC_FAV), sd(X11_HC_FAV), mean(X12_HC_MON), sd(X12_HC_MON),
+                                                  mean(X13_HC_POR), sd(X13_HC_POR), mean(X14_HC_CYC), sd(X14_HC_CYC),
+                                                  mean(X15_HC_ENC), sd(X15_HC_ENC), mean(X15_HC_FOL), sd(X15_HC_FOL),
+                                                  mean(X16_HC_O), sd(X16_HC_O), mean(X17_SC), sd(X17_SC),
+                                                  mean(X18_NPFF), sd(X18_NPFF), mean(X20_SPO_B), sd(X20_SPO_B),
+                                                  mean(X21_SPO_E), sd(X21_SPO_E), mean(X22_SPO_L), sd(X22_SPO_L),
+                                                  mean(X23_SPO_M), sd(X23_SPO_M), mean(X24_SPO_O), sd(X24_SPO_O))
+                                                  
+                                                
+colnames(DepthSum)<- c("Depth" ,"Temperature", "sd_Temp", "Saturation", "sd_Saturation",
+                      "Oxygen", "CDOM", "Chlorophyll-a","Rock", "sd_Rock", "Pebbles / Gravel", "Sand", "sd_Sand",
+                      "Brown_Macroalgae_Dictyota"	, "sd_Brown_Macroalgae_Dictyota",
+                      "Brown_Macroalgae_Fine_Branching", "sd_Brown_Macroalgae_Fine_Branching",
+                      "Brown_Macroalgae_FilamentousFiliform"	, "sd_Brown_Macroalgae_FilamentousFiliform"	,
+                      "Brown_Macroalgae_Other", "sd_Brown_Macroalgae_Other",
+                      "Red_Macroalgae_Membraneous", "sd_Red_Macroalgae_Membraneous",
+                      "Red_Macroalgae_Fine_Branching", "sd_Red_Macroalgae_Fine_Branching",
+                      "Red_Macroalgae_FilamentousFiliform"	, "sd_Red_Macroalgae_FilamentousFiliform",
+                      "CCA", "sd_CCA",
+                      "Green_Macroalgae", "sd_Green_Macroalgae",
+                      "Acropora_sp" , "sd_Acropora_sp",
+                      "Favid_sp", "sd_Favid_sp",
+                      "Montipora_sp"	, "sd_Montipora_sp"	,
+                      "Porites_sp", "sd_Porites_sp",
+                      "Solitary_coral_Cycloseris"	, "sd_Solitary_coral_Cycloseris"	,
+                      "NonAcropora_Encrusting", "sd_NonAcropora_Encrusting",
+                      "NonAcropora_Foliose", "sd_NonAcropora_Foliose",
+                      "NonAcropora_Other"	, "sd_NonAcropora_Other"	,
+                      "Soft_Coral"	, "sd_Soft_Coral"	,
+                      "Nonphotosynthetic_filter_feeders", "sd_Nonphotosynthetic_filter_feeders",
+                      "Sponges_Branching"	, "sd_Sponges_Branching"	,
+                      "Sponges_Encrusting", "sd_Sponges_Encrusting",
+                      "Sponges_Laminar"	, "sd_Sponges_Laminar"	,
+                      "Sponges_Massive", "sd_Sponges_Massive",
+                      "Sponges_Other", "sd_Sponges_Other")
+
+
+	
+
+
+RockStErr <- with(alldata, tapply(Rock, depth_10mEDIT, sd)/sqrt(summary(alldata$depth_10mEDIT)))
+DepthSum$se_Rock <- RockStErr
+SandStErr <- with(alldata, tapply(Sand, depth_10mEDIT, sd)/sqrt(summary(alldata$depth_10mEDIT)))
+DepthSum$se_Sand <- SandStErr
+TempStErr <- with(alldata, tapply(TEMP, depth_10mEDIT, sd)/sqrt(summary(alldata$depth_10mEDIT)))
+DepthSum$se_Temp <- TempStErr
+SaturationStErr <- with(alldata, tapply(Saturation_opt, depth_10mEDIT, sd, na.rm = TRUE)/sqrt(summary(alldata$depth_10mEDIT)))
+DepthSum$se_Saturation <- SaturationStErr
+
+
+X1_BM_DStErr <- with(alldata, tapply(X1_BM_D, depth_10mEDIT, sd, na.rm = TRUE)/sqrt(summary(alldata$depth_10mEDIT)))
+DepthSum$se_Brown_Macroalgae_Dictyota <- X1_BM_DStErr
+X2_BM_FBStErr <- with(alldata, tapply(X2_BM_FB, depth_10mEDIT, sd, na.rm = TRUE)/sqrt(summary(alldata$depth_10mEDIT)))
+DepthSum$se_Brown_Macroalgae_Fine_Branching <- X2_BM_FBStErr
+X3_BM_FILStErr <- with(alldata, tapply(X3_BM_FIL, depth_10mEDIT, sd, na.rm = TRUE)/sqrt(summary(alldata$depth_10mEDIT)))
+DepthSum$se_Brown_Macroalgae_FilamentousFiliform <- X3_BM_FILStErr
+X4_BM_OStErr <- with(alldata, tapply(X4_BM_O, depth_10mEDIT, sd, na.rm = TRUE)/sqrt(summary(alldata$depth_10mEDIT)))
+DepthSum$se_Brown_Macroalgae_Other <- X4_BM_OStErr
+X5_RM_MEMStErr <- with(alldata, tapply(X5_RM_MEM, depth_10mEDIT, sd, na.rm = TRUE)/sqrt(summary(alldata$depth_10mEDIT)))
+DepthSum$se_Red_Macroalgae_Membraneous <- X5_RM_MEMStErr
+X6_RM_FBStErr <- with(alldata, tapply(X6_RM_FB, depth_10mEDIT, sd, na.rm = TRUE)/sqrt(summary(alldata$depth_10mEDIT)))
+DepthSum$se_Red_Macroalgae_Fine_Branching <- X6_RM_FBStErr
+X7_RM_FILStErr <- with(alldata, tapply(X7_RM_FIL, depth_10mEDIT, sd, na.rm = TRUE)/sqrt(summary(alldata$depth_10mEDIT)))
+DepthSum$se_Red_Macroalgae_FilamentousFiliform <- X7_RM_FILStErr
+X8_RM_CCAStErr <- with(alldata, tapply(X8_RM_CCA, depth_10mEDIT, sd, na.rm = TRUE)/sqrt(summary(alldata$depth_10mEDIT)))
+DepthSum$se_CCA <- X8_RM_CCAStErr
+X9_GMStErr <- with(alldata, tapply(X9_GM, depth_10mEDIT, sd, na.rm = TRUE)/sqrt(summary(alldata$depth_10mEDIT)))
+DepthSum$se_Green_Macroalgae <- X9_GMStErr
+X10_HC_ACRStErr <- with(alldata, tapply(X10_HC_ACR, depth_10mEDIT, sd, na.rm = TRUE)/sqrt(summary(alldata$depth_10mEDIT)))
+DepthSum$se_Acropora_sp <- X10_HC_ACRStErr
+X11_HC_FAVStErr <- with(alldata, tapply(X11_HC_FAV, depth_10mEDIT, sd, na.rm = TRUE)/sqrt(summary(alldata$depth_10mEDIT)))
+DepthSum$se_Favid_sp <- X11_HC_FAVStErr
+X12_HC_MONStErr <- with(alldata, tapply(X12_HC_MON, depth_10mEDIT, sd, na.rm = TRUE)/sqrt(summary(alldata$depth_10mEDIT)))
+DepthSum$se_Montipora_sp <- X12_HC_MONStErr
+X13_HC_PORStErr <- with(alldata, tapply(X13_HC_POR, depth_10mEDIT, sd, na.rm = TRUE)/sqrt(summary(alldata$depth_10mEDIT)))
+DepthSum$se_Porites_sp <- X13_HC_PORStErr
+X14_HC_CYCStErr <- with(alldata, tapply(X14_HC_CYC, depth_10mEDIT, sd, na.rm = TRUE)/sqrt(summary(alldata$depth_10mEDIT)))
+DepthSum$se_Solitary_coral_Cycloseris <- X14_HC_CYCStErr
+X15_HC_ENCStErr <- with(alldata, tapply(X15_HC_ENC, depth_10mEDIT, sd, na.rm = TRUE)/sqrt(summary(alldata$depth_10mEDIT)))
+DepthSum$se_NonAcropora_Encrusting <- X15_HC_ENCStErr
+X15_HC_FOLStErr <- with(alldata, tapply(X15_HC_FOL, depth_10mEDIT, sd, na.rm = TRUE)/sqrt(summary(alldata$depth_10mEDIT)))
+DepthSum$se_NonAcropora_Foliose <- X15_HC_FOLStErr
+X16_HC_OStErr <- with(alldata, tapply(X16_HC_O, depth_10mEDIT, sd, na.rm = TRUE)/sqrt(summary(alldata$depth_10mEDIT)))
+DepthSum$se_NonAcropora_Other <- X16_HC_OStErr
+X17_SCStErr <- with(alldata, tapply(X17_SC, depth_10mEDIT, sd, na.rm = TRUE)/sqrt(summary(alldata$depth_10mEDIT)))
+DepthSum$se_Soft_Coral <- X17_SCStErr
+X18_NPFFStErr <- with(alldata, tapply(X18_NPFF, depth_10mEDIT, sd, na.rm = TRUE)/sqrt(summary(alldata$depth_10mEDIT)))
+DepthSum$se_Nonphotosynthetic_filter_feeders <- X18_NPFFStErr
+X20_SPO_BStErr <- with(alldata, tapply(X20_SPO_B, depth_10mEDIT, sd, na.rm = TRUE)/sqrt(summary(alldata$depth_10mEDIT)))
+DepthSum$se_Sponges_Branching <- X20_SPO_BStErr
+X21_SPO_EStErr <- with(alldata, tapply(X21_SPO_E, depth_10mEDIT, sd, na.rm = TRUE)/sqrt(summary(alldata$depth_10mEDIT)))
+DepthSum$se_Sponges_Encrusting <- X21_SPO_EStErr
+X22_SPO_LStErr <- with(alldata, tapply(X22_SPO_L, depth_10mEDIT, sd, na.rm = TRUE)/sqrt(summary(alldata$depth_10mEDIT)))
+DepthSum$se_Sponges_Laminar <- X22_SPO_LStErr
+X23_SPO_MStErr <- with(alldata, tapply(X23_SPO_M, depth_10mEDIT, sd, na.rm = TRUE)/sqrt(summary(alldata$depth_10mEDIT)))
+DepthSum$se_Sponges_Massive <- X23_SPO_MStErr
+X24_SPO_OStErr <- with(alldata, tapply(X24_SPO_O, depth_10mEDIT, sd, na.rm = TRUE)/sqrt(summary(alldata$depth_10mEDIT)))
+DepthSum$se_Sponges_Other <- X24_SPO_OStErr
+	
+	
+
+Acropora <- ggplot(DepthSum, aes(x=Depth, y = Acropora_sp)) +
+            geom_point(size = 3) +
+            theme_bw()+
+            theme(panel.grid.minor=element_blank()) +
+            labs(y = "Acropora Cover (%) ± S.E", x = "Depth (m)") +
+            theme(axis.title.y = element_text(face="bold")) +
+            guides(fill = guide_legend(reverse=FALSE, title= NULL)) +
+            geom_errorbar(aes(ymin= Acropora_sp - se_Acropora_sp, ymax= Acropora_sp + se_Acropora_sp), 
+                          width=.2,position=position_dodge(.9), show.legend = F)+
+            theme(legend.title=element_blank()) +
+            guides(colour = guide_legend(override.aes = list(size = 10, shape = 15)))
+
+setwd("C:/OneDrive/C2_Coms/FIGURES/SpeciesPlots")
+png(file = paste('Acropora_sp_Depth_Plot.png', sep = ''), 
+            width = 6, height = 4, units = 'in', res = 300)
+Acropora
+dev.off()
+
+
+Solitary_coral_Cycloseris <- ggplot(DepthSum, aes(x=Depth, y = Solitary_coral_Cycloseris)) +
+            geom_point(size = 3) +
+            theme_bw()+
+            theme(panel.grid.minor=element_blank()) +
+            labs(y = "Cycloseris Cover (%) ± S.E", x = "Depth (m)") +
+            theme(axis.title.y = element_text(face="bold")) +
+            guides(fill = guide_legend(reverse=FALSE, title= NULL)) +
+            geom_errorbar(aes(ymin= Solitary_coral_Cycloseris - se_Solitary_coral_Cycloseris, 
+                              ymax= Solitary_coral_Cycloseris + se_Solitary_coral_Cycloseris), 
+                          width=.2,position=position_dodge(.9), show.legend = F)+
+            theme(legend.title=element_blank()) +
+            guides(colour = guide_legend(override.aes = list(size = 10, shape = 15)))
+
+setwd("C:/OneDrive/C2_Coms/FIGURES/SpeciesPlots")
+png(file = paste('Solitary_coral_Cycloseris_sp_Depth_Plot.png', sep = ''), 
+            width = 6, height = 4, units = 'in', res = 300)
+Solitary_coral_Cycloseris
+dev.off()
+
+
+Montipora <- ggplot(DepthSum, aes(x=Depth, y = Montipora_sp)) +
+            geom_point(size = 3) +
+            theme_bw()+
+            theme(panel.grid.minor=element_blank()) +
+            labs(y = "Montipora Cover (%) ± S.E", x = "Depth (m)") +
+            theme(axis.title.y = element_text(face="bold")) +
+            guides(fill = guide_legend(reverse=FALSE, title= NULL)) +
+            geom_errorbar(aes(ymin= Montipora_sp - se_Montipora_sp, ymax= Montipora_sp + se_Montipora_sp), 
+                          width=.2,position=position_dodge(.9), show.legend = F)+
+            theme(legend.title=element_blank()) +
+            guides(colour = guide_legend(override.aes = list(size = 10, shape = 15)))
+
+setwd("C:/OneDrive/C2_Coms/FIGURES/SpeciesPlots")
+png(file = paste('Montipora_sp_Depth_Plot.png', sep = ''), 
+            width = 6, height = 4, units = 'in', res = 300)
+Montipora
+dev.off()
+
+
+Favid <- ggplot(DepthSum, aes(x=Depth, y = Favid_sp)) +
+            geom_point(size = 3) +
+            theme_bw()+
+            theme(panel.grid.minor=element_blank()) +
+            labs(y = "Favid Cover (%) ± S.E", x = "Depth (m)") +
+            theme(axis.title.y = element_text(face="bold")) +
+            guides(fill = guide_legend(reverse=FALSE, title= NULL)) +
+            geom_errorbar(aes(ymin= Favid_sp - se_Favid_sp, ymax= Favid_sp + se_Favid_sp), 
+                          width=.2,position=position_dodge(.9), show.legend = F)+
+            theme(legend.title=element_blank()) +
+            guides(colour = guide_legend(override.aes = list(size = 10, shape = 15)))
+
+setwd("C:/OneDrive/C2_Coms/FIGURES/SpeciesPlots")
+png(file = paste('Favid_sp_Depth_Plot.png', sep = ''), 
+            width = 6, height = 4, units = 'in', res = 300)
+Favid
+dev.off()
+
+
+Porites <- ggplot(DepthSum, aes(x=Depth, y = Porites_sp)) +
+            geom_point(size = 3) +
+            theme_bw()+
+            theme(panel.grid.minor=element_blank()) +
+            labs(y = "Porites Cover (%) ± S.E", x = "Depth (m)") +
+            theme(axis.title.y = element_text(face="bold")) +
+            guides(fill = guide_legend(reverse=FALSE, title= NULL)) +
+            geom_errorbar(aes(ymin= Porites_sp - se_Porites_sp, ymax= Porites_sp + se_Porites_sp), 
+                          width=.2,position=position_dodge(.9), show.legend = F)+
+            theme(legend.title=element_blank()) +
+            guides(colour = guide_legend(override.aes = list(size = 10, shape = 15)))
+
+setwd("C:/OneDrive/C2_Coms/FIGURES/SpeciesPlots")
+png(file = paste('Porites_sp_Depth_Plot.png', sep = ''), 
+            width = 6, height = 4, units = 'in', res = 300)
+Porites
+dev.off()
+
+
+NonAcropora_Encrusting <- ggplot(DepthSum, aes(x=Depth, y = NonAcropora_Encrusting)) +
+            geom_point(size = 3) +
+            theme_bw()+
+            theme(panel.grid.minor=element_blank()) +
+            labs(y = "Non-Acropora: Encrusting Cover (%) ± S.E", x = "Depth (m)") +
+            theme(axis.title.y = element_text(face="bold")) +
+            guides(fill = guide_legend(reverse=FALSE, title= NULL)) +
+            geom_errorbar(aes(ymin= NonAcropora_Encrusting - se_NonAcropora_Encrusting, 
+                              ymax= NonAcropora_Encrusting + se_NonAcropora_Encrusting), 
+                          width=.2,position=position_dodge(.9), show.legend = F)+
+            theme(legend.title=element_blank()) +
+            guides(colour = guide_legend(override.aes = list(size = 10, shape = 15)))
+
+setwd("C:/OneDrive/C2_Coms/FIGURES/SpeciesPlots")
+png(file = paste('NonAcropora_Encrusting_sp_Depth_Plot.png', sep = ''), 
+            width = 6, height = 4, units = 'in', res = 300)
+NonAcropora_Encrusting
+dev.off()
+
+
+NonAcropora_Foliose <- ggplot(DepthSum, aes(x=Depth, y = NonAcropora_Foliose)) +
+            geom_point(size = 3) +
+            theme_bw()+
+            theme(panel.grid.minor=element_blank()) +
+            labs(y = "Non-Acropora_Foliose Cover (%) ± S.E", x = "Depth (m)") +
+            theme(axis.title.y = element_text(face="bold")) +
+            guides(fill = guide_legend(reverse=FALSE, title= NULL)) +
+            geom_errorbar(aes(ymin= NonAcropora_Foliose - se_NonAcropora_Foliose, 
+                              ymax= NonAcropora_Foliose + se_NonAcropora_Foliose), 
+                          width=.2,position=position_dodge(.9), show.legend = F)+
+            theme(legend.title=element_blank()) +
+            guides(colour = guide_legend(override.aes = list(size = 10, shape = 15)))
+
+setwd("C:/OneDrive/C2_Coms/FIGURES/SpeciesPlots")
+png(file = paste('NonAcropora_Foliose_sp_Depth_Plot.png', sep = ''), 
+            width = 6, height = 4, units = 'in', res = 300)
+NonAcropora_Foliose
+dev.off()
+
+
+NonAcropora_Other <- ggplot(DepthSum, aes(x=Depth, y = NonAcropora_Other)) +
+            geom_point(size = 3) +
+            theme_bw()+
+            theme(panel.grid.minor=element_blank()) +
+            labs(y = "Non-Acropora: Other Cover (%) ± S.E", x = "Depth (m)") +
+            theme(axis.title.y = element_text(face="bold")) +
+            guides(fill = guide_legend(reverse=FALSE, title= NULL)) +
+            geom_errorbar(aes(ymin= NonAcropora_Other - se_NonAcropora_Other, 
+                              ymax= NonAcropora_Other + se_NonAcropora_Other), 
+                          width=.2,position=position_dodge(.9), show.legend = F)+
+            theme(legend.title=element_blank()) +
+            guides(colour = guide_legend(override.aes = list(size = 10, shape = 15)))
+
+setwd("C:/OneDrive/C2_Coms/FIGURES/SpeciesPlots")
+png(file = paste('NonAcropora_Other_sp_Depth_Plot.png', sep = ''), 
+            width = 6, height = 4, units = 'in', res = 300)
+NonAcropora_Other
+dev.off()
+
+
+
+Nonphotosynthetic_filter_feeders <- ggplot(DepthSum, aes(x=Depth, y = Nonphotosynthetic_filter_feeders)) +
+            geom_point(size = 3) +
+            theme_bw()+
+            theme(panel.grid.minor=element_blank()) +
+            labs(y = "Nonphotosynthetic filter feeder Cover (%) ± S.E", x = "Depth (m)") +
+            theme(axis.title.y = element_text(face="bold")) +
+            guides(fill = guide_legend(reverse=FALSE, title= NULL)) +
+            geom_errorbar(aes(ymin= Nonphotosynthetic_filter_feeders - se_Nonphotosynthetic_filter_feeders, 
+                              ymax= Nonphotosynthetic_filter_feeders + se_Nonphotosynthetic_filter_feeders), 
+                          width=.2,position=position_dodge(.9), show.legend = F)+
+            theme(legend.title=element_blank()) +
+            guides(colour = guide_legend(override.aes = list(size = 10, shape = 15)))
+
+setwd("C:/OneDrive/C2_Coms/FIGURES/SpeciesPlots")
+png(file = paste('Nonphotosynthetic_filter_feeders_Depth_Plot.png', sep = ''), 
+            width = 6, height = 4, units = 'in', res = 300)
+Nonphotosynthetic_filter_feeders
+dev.off()
+
+
+
+Sponges_Laminar <- ggplot(DepthSum, aes(x=Depth, y = Sponges_Laminar)) +
+            geom_point(size = 3) +
+            theme_bw()+
+            theme(panel.grid.minor=element_blank()) +
+            labs(y = "Sponge (Laminar) Cover (%) ± S.E", x = "Depth (m)") +
+            theme(axis.title.y = element_text(face="bold")) +
+            guides(fill = guide_legend(reverse=FALSE, title= NULL)) +
+            geom_errorbar(aes(ymin= Sponges_Laminar - se_Sponges_Laminar, ymax= Sponges_Laminar + se_Sponges_Laminar), 
+                          width=.2,position=position_dodge(.9), show.legend = F)+
+            theme(legend.title=element_blank()) +
+            guides(colour = guide_legend(override.aes = list(size = 10, shape = 15)))
+
+setwd("C:/OneDrive/C2_Coms/FIGURES/SpeciesPlots")
+png(file = paste('Sponges_Laminar_Depth_Plot.png', sep = ''), 
+            width = 6, height = 4, units = 'in', res = 300)
+Sponges_Laminar
+dev.off()
+
+
+Sponges_Massive <- ggplot(DepthSum, aes(x=Depth, y = Sponges_Massive)) +
+            geom_point(size = 3) +
+            theme_bw()+
+            theme(panel.grid.minor=element_blank()) +
+            labs(y = "Sponge (Massive) Cover (%) ± S.E", x = "Depth (m)") +
+            theme(axis.title.y = element_text(face="bold")) +
+            guides(fill = guide_legend(reverse=FALSE, title= NULL)) +
+            geom_errorbar(aes(ymin= Sponges_Massive - se_Sponges_Massive, ymax= Sponges_Massive + se_Sponges_Massive), 
+                          width=.2,position=position_dodge(.9), show.legend = F)+
+            theme(legend.title=element_blank()) +
+            guides(colour = guide_legend(override.aes = list(size = 10, shape = 15)))
+
+setwd("C:/OneDrive/C2_Coms/FIGURES/SpeciesPlots")
+png(file = paste('Sponges_Massive_Depth_Plot.png', sep = ''), 
+            width = 6, height = 4, units = 'in', res = 300)
+Sponges_Massive
+dev.off()
+
+
+Sponges_Other <- ggplot(DepthSum, aes(x=Depth, y = Sponges_Other)) +
+            geom_point(size = 3) +
+            theme_bw()+
+            theme(panel.grid.minor=element_blank()) +
+            labs(y = "Sponge (Other) Cover (%) ± S.E", x = "Depth (m)") +
+            theme(axis.title.y = element_text(face="bold")) +
+            guides(fill = guide_legend(reverse=FALSE, title= NULL)) +
+            geom_errorbar(aes(ymin= Sponges_Other - se_Sponges_Other, ymax= Sponges_Other + se_Sponges_Other), 
+                          width=.2,position=position_dodge(.9), show.legend = F)+
+            theme(legend.title=element_blank()) +
+            guides(colour = guide_legend(override.aes = list(size = 10, shape = 15)))
+
+setwd("C:/OneDrive/C2_Coms/FIGURES/SpeciesPlots")
+png(file = paste('Sponges_Other_Depth_Plot.png', sep = ''), 
+            width = 6, height = 4, units = 'in', res = 300)
+Sponges_Other
+dev.off()
+
+
+Sponges_Encrusting <- ggplot(DepthSum, aes(x=Depth, y = Sponges_Encrusting)) +
+            geom_point(size = 3) +
+            theme_bw()+
+            theme(panel.grid.minor=element_blank()) +
+            labs(y = "Sponge (Encrusting) Cover (%) ± S.E", x = "Depth (m)") +
+            theme(axis.title.y = element_text(face="bold")) +
+            guides(fill = guide_legend(reverse=FALSE, title= NULL)) +
+            geom_errorbar(aes(ymin= Sponges_Encrusting - se_Sponges_Encrusting, 
+                              ymax= Sponges_Encrusting + se_Sponges_Encrusting), 
+                          width=.2,position=position_dodge(.9), show.legend = F)+
+            theme(legend.title=element_blank()) +
+            guides(colour = guide_legend(override.aes = list(size = 10, shape = 15)))
+
+setwd("C:/OneDrive/C2_Coms/FIGURES/SpeciesPlots")
+png(file = paste('Sponges_Encrusting_Depth_Plot.png', sep = ''), 
+            width = 6, height = 4, units = 'in', res = 300)
+Sponges_Encrusting
+dev.off()
+
+
+
+Sponges_Encrusting <- ggplot(DepthSum, aes(x=Depth, y = Sponges_Encrusting)) +
+            geom_point(size = 3) +
+            theme_bw()+
+            theme(panel.grid.minor=element_blank()) +
+            labs(y = "Sponge (Encrusting) Cover (%) ± S.E", x = "Depth (m)") +
+            theme(axis.title.y = element_text(face="bold")) +
+            guides(fill = guide_legend(reverse=FALSE, title= NULL)) +
+            geom_errorbar(aes(ymin= Sponges_Encrusting - se_Sponges_Encrusting, 
+                              ymax= Sponges_Encrusting + se_Sponges_Encrusting), 
+                          width=.2,position=position_dodge(.9), show.legend = F)+
+            theme(legend.title=element_blank()) +
+            guides(colour = guide_legend(override.aes = list(size = 10, shape = 15)))
+
+setwd("C:/OneDrive/C2_Coms/FIGURES/SpeciesPlots")
+png(file = paste('Sponges_Encrusting_Depth_Plot.png', sep = ''), 
+            width = 6, height = 4, units = 'in', res = 300)
+Sponges_Encrusting
+dev.off()
+
+
+Sponges_Branching <- ggplot(DepthSum, aes(x=Depth, y = Sponges_Branching)) +
+            geom_point(size = 3) +
+            theme_bw()+
+            theme(panel.grid.minor=element_blank()) +
+            labs(y = "Sponge (Branching) Cover (%) ± S.E", x = "Depth (m)") +
+            theme(axis.title.y = element_text(face="bold")) +
+            guides(fill = guide_legend(reverse=FALSE, title= NULL)) +
+            geom_errorbar(aes(ymin= Sponges_Branching - se_Sponges_Branching, 
+                              ymax= Sponges_Branching + se_Sponges_Branching), 
+                          width=.2,position=position_dodge(.9), show.legend = F)+
+            theme(legend.title=element_blank()) +
+            guides(colour = guide_legend(override.aes = list(size = 10, shape = 15)))
+
+setwd("C:/OneDrive/C2_Coms/FIGURES/SpeciesPlots")
+png(file = paste('Sponges_Branching_Depth_Plot.png', sep = ''), 
+            width = 6, height = 4, units = 'in', res = 300)
+Sponges_Branching
+dev.off()
+
+
+
+CCA <- ggplot(DepthSum, aes(x=Depth, y = CCA)) +
+            geom_point(size = 3) +
+            theme_bw()+
+            theme(panel.grid.minor=element_blank()) +
+            labs(y = "CCA Cover (%) ± S.E", x = "Depth (m)") +
+            theme(axis.title.y = element_text(face="bold")) +
+            guides(fill = guide_legend(reverse=FALSE, title= NULL)) +
+            geom_errorbar(aes(ymin= CCA - se_CCA, 
+                              ymax= CCA + se_CCA), 
+                          width=.2,position=position_dodge(.9), show.legend = F)+
+            theme(legend.title=element_blank()) +
+            guides(colour = guide_legend(override.aes = list(size = 10, shape = 15)))
+
+setwd("C:/OneDrive/C2_Coms/FIGURES/SpeciesPlots")
+png(file = paste('CCA_Depth_Plot.png', sep = ''), 
+            width = 6, height = 4, units = 'in', res = 300)
+CCA
+dev.off()
+
+
+Red_Macroalgae_FilamentousFiliform <- ggplot(DepthSum, aes(x=Depth, y = Red_Macroalgae_FilamentousFiliform)) +
+            geom_point(size = 3) +
+            theme_bw()+
+            theme(panel.grid.minor=element_blank()) +
+            labs(y = "Red Macroalgae: Filamentous/Filiform Cover (%) ± S.E", x = "Depth (m)") +
+            theme(axis.title.y = element_text(face="bold")) +
+            guides(fill = guide_legend(reverse=FALSE, title= NULL)) +
+            geom_errorbar(aes(ymin= Red_Macroalgae_FilamentousFiliform - se_Red_Macroalgae_FilamentousFiliform, 
+                              ymax= Red_Macroalgae_FilamentousFiliform + se_Red_Macroalgae_FilamentousFiliform), 
+                          width=.2,position=position_dodge(.9), show.legend = F)+
+            theme(legend.title=element_blank()) +
+            guides(colour = guide_legend(override.aes = list(size = 10, shape = 15)))
+
+setwd("C:/OneDrive/C2_Coms/FIGURES/SpeciesPlots")
+png(file = paste('Red_Macroalgae_FilamentousFiliform_Depth_Plot.png', sep = ''), 
+            width = 6, height = 4, units = 'in', res = 300)
+Red_Macroalgae_FilamentousFiliform
+dev.off()
+
+
+Red_Macroalgae_Fine_Branching <- ggplot(DepthSum, aes(x=Depth, y = Red_Macroalgae_Fine_Branching)) +
+            geom_point(size = 3) +
+            theme_bw()+
+            theme(panel.grid.minor=element_blank()) +
+            labs(y = "Red Macroalgae: Fine Branching Cover (%) ± S.E", x = "Depth (m)") +
+            theme(axis.title.y = element_text(face="bold")) +
+            guides(fill = guide_legend(reverse=FALSE, title= NULL)) +
+            geom_errorbar(aes(ymin= Red_Macroalgae_Fine_Branching - se_Red_Macroalgae_Fine_Branching, 
+                              ymax= Red_Macroalgae_Fine_Branching + se_Red_Macroalgae_Fine_Branching), 
+                          width=.2,position=position_dodge(.9), show.legend = F)+
+            theme(legend.title=element_blank()) +
+            guides(colour = guide_legend(override.aes = list(size = 10, shape = 15)))
+
+setwd("C:/OneDrive/C2_Coms/FIGURES/SpeciesPlots")
+png(file = paste('Red_Macroalgae_Fine_Branching_Depth_Plot.png', sep = ''), 
+            width = 6, height = 4, units = 'in', res = 300)
+Red_Macroalgae_Fine_Branching
+dev.off()
+
+
+Red_Macroalgae_Membraneous <- ggplot(DepthSum, aes(x=Depth, y = Red_Macroalgae_Membraneous)) +
+            geom_point(size = 3) +
+            theme_bw()+
+            theme(panel.grid.minor=element_blank()) +
+            labs(y = "Red Macroalgae: Membraneous Cover (%) ± S.E", x = "Depth (m)") +
+            theme(axis.title.y = element_text(face="bold")) +
+            guides(fill = guide_legend(reverse=FALSE, title= NULL)) +
+            geom_errorbar(aes(ymin= Red_Macroalgae_Membraneous - se_Red_Macroalgae_Membraneous, 
+                              ymax= Red_Macroalgae_Membraneous + se_Red_Macroalgae_Membraneous), 
+                          width=.2,position=position_dodge(.9), show.legend = F)+
+            theme(legend.title=element_blank()) +
+            guides(colour = guide_legend(override.aes = list(size = 10, shape = 15)))
+
+setwd("C:/OneDrive/C2_Coms/FIGURES/SpeciesPlots")
+png(file = paste('Red_Macroalgae_Membraneous_Depth_Plot.png', sep = ''), 
+            width = 6, height = 4, units = 'in', res = 300)
+Red_Macroalgae_Membraneous
+dev.off()
+
+
+Brown_Macroalgae_FilamentousFiliform <- ggplot(DepthSum, aes(x=Depth, y = Brown_Macroalgae_FilamentousFiliform)) +
+            geom_point(size = 3) +
+            theme_bw()+
+            theme(panel.grid.minor=element_blank()) +
+            labs(y = "Brown Macroalgae: Filamentous/Filiform Cover (%) ± S.E", x = "Depth (m)") +
+            theme(axis.title.y = element_text(face="bold")) +
+            guides(fill = guide_legend(reverse=FALSE, title= NULL)) +
+            geom_errorbar(aes(ymin= Brown_Macroalgae_FilamentousFiliform - se_Brown_Macroalgae_FilamentousFiliform, 
+                              ymax= Brown_Macroalgae_FilamentousFiliform + se_Brown_Macroalgae_FilamentousFiliform), 
+                          width=.2,position=position_dodge(.9), show.legend = F)+
+            theme(legend.title=element_blank()) +
+            guides(colour = guide_legend(override.aes = list(size = 10, shape = 15)))
+
+setwd("C:/OneDrive/C2_Coms/FIGURES/SpeciesPlots")
+png(file = paste('Brown_Macroalgae_FilamentousFiliform_Depth_Plot.png', sep = ''), 
+            width = 6, height = 4, units = 'in', res = 300)
+Brown_Macroalgae_FilamentousFiliform
+dev.off()
+
+
+Brown_Macroalgae_Fine_Branching <- ggplot(DepthSum, aes(x=Depth, y = Brown_Macroalgae_Fine_Branching)) +
+            geom_point(size = 3) +
+            theme_bw()+
+            theme(panel.grid.minor=element_blank()) +
+            labs(y = "Brown Macroalgae: Fine Branching Cover (%) ± S.E", x = "Depth (m)") +
+            theme(axis.title.y = element_text(face="bold")) +
+            guides(fill = guide_legend(reverse=FALSE, title= NULL)) +
+            geom_errorbar(aes(ymin= Brown_Macroalgae_Fine_Branching - se_Brown_Macroalgae_Fine_Branching, 
+                              ymax= Brown_Macroalgae_Fine_Branching + se_Brown_Macroalgae_Fine_Branching), 
+                          width=.2,position=position_dodge(.9), show.legend = F)+
+            theme(legend.title=element_blank()) +
+            guides(colour = guide_legend(override.aes = list(size = 10, shape = 15)))
+
+setwd("C:/OneDrive/C2_Coms/FIGURES/SpeciesPlots")
+png(file = paste('Brown_Macroalgae_Fine_Branching_Depth_Plot.png', sep = ''), 
+            width = 6, height = 4, units = 'in', res = 300)
+Brown_Macroalgae_Fine_Branching
+dev.off()
+
+
+Brown_Macroalgae_Dictyota <- ggplot(DepthSum, aes(x=Depth, y = Brown_Macroalgae_Dictyota)) +
+            geom_point(size = 3) +
+            theme_bw()+
+            theme(panel.grid.minor=element_blank()) +
+            labs(y = "Brown Macroalgae: Dictyota Cover (%) ± S.E", x = "Depth (m)") +
+            theme(axis.title.y = element_text(face="bold")) +
+            guides(fill = guide_legend(reverse=FALSE, title= NULL)) +
+            geom_errorbar(aes(ymin= Brown_Macroalgae_Dictyota - se_Brown_Macroalgae_Dictyota, 
+                              ymax= Brown_Macroalgae_Dictyota + se_Brown_Macroalgae_Dictyota), 
+                          width=.2,position=position_dodge(.9), show.legend = F)+
+            theme(legend.title=element_blank()) +
+            guides(colour = guide_legend(override.aes = list(size = 10, shape = 15)))
+
+setwd("C:/OneDrive/C2_Coms/FIGURES/SpeciesPlots")
+png(file = paste('Brown_Macroalgae_Dictyota_Depth_Plot.png', sep = ''), 
+            width = 6, height = 4, units = 'in', res = 300)
+Brown_Macroalgae_Dictyota
+dev.off()
+
+
+Brown_Macroalgae_Other <- ggplot(DepthSum, aes(x=Depth, y = Brown_Macroalgae_Other)) +
+            geom_point(size = 3) +
+            theme_bw()+
+            theme(panel.grid.minor=element_blank()) +
+            labs(y = "Brown Macroalgae: Other Cover (%) ± S.E", x = "Depth (m)") +
+            theme(axis.title.y = element_text(face="bold")) +
+            guides(fill = guide_legend(reverse=FALSE, title= NULL)) +
+            geom_errorbar(aes(ymin= Brown_Macroalgae_Other - se_Brown_Macroalgae_Other, 
+                              ymax= Brown_Macroalgae_Other + se_Brown_Macroalgae_Other), 
+                          width=.2,position=position_dodge(.9), show.legend = F)+
+            theme(legend.title=element_blank()) +
+            guides(colour = guide_legend(override.aes = list(size = 10, shape = 15)))
+
+setwd("C:/OneDrive/C2_Coms/FIGURES/SpeciesPlots")
+png(file = paste('Brown_Macroalgae_Other_Depth_Plot.png', sep = ''), 
+            width = 6, height = 4, units = 'in', res = 300)
+Brown_Macroalgae_Other
+dev.off()
+
+
+Green_Macroalgae <- ggplot(DepthSum, aes(x=Depth, y = Green_Macroalgae)) +
+            geom_point(size = 3) +
+            theme_bw()+
+            theme(panel.grid.minor=element_blank()) +
+            labs(y = "Green Macroalgae Cover (%) ± S.E", x = "Depth (m)") +
+            theme(axis.title.y = element_text(face="bold")) +
+            guides(fill = guide_legend(reverse=FALSE, title= NULL)) +
+            geom_errorbar(aes(ymin= Green_Macroalgae - se_Green_Macroalgae, 
+                              ymax= Green_Macroalgae + se_Green_Macroalgae), 
+                          width=.2,position=position_dodge(.9), show.legend = F)+
+            theme(legend.title=element_blank()) +
+            guides(colour = guide_legend(override.aes = list(size = 10, shape = 15)))
+
+setwd("C:/OneDrive/C2_Coms/FIGURES/SpeciesPlots")
+png(file = paste('Green_Macroalgae_Depth_Plot.png', sep = ''), 
+            width = 6, height = 4, units = 'in', res = 300)
+Green_Macroalgae
+dev.off()
+
+
+Soft_Coral <- ggplot(DepthSum, aes(x=Depth, y = Soft_Coral)) +
+            geom_point(size = 3) +
+            theme_bw()+
+            theme(panel.grid.minor=element_blank()) +
+            labs(y = "Soft Coral Cover (%) ± S.E", x = "Depth (m)") +
+            theme(axis.title.y = element_text(face="bold")) +
+            guides(fill = guide_legend(reverse=FALSE, title= NULL)) +
+            geom_errorbar(aes(ymin= Soft_Coral - se_Soft_Coral, 
+                              ymax= Soft_Coral + se_Soft_Coral), 
+                          width=.2,position=position_dodge(.9), show.legend = F)+
+            theme(legend.title=element_blank()) +
+            guides(colour = guide_legend(override.aes = list(size = 10, shape = 15)))
+
+setwd("C:/OneDrive/C2_Coms/FIGURES/SpeciesPlots")
+png(file = paste('Soft_Coral_Depth_Plot.png', sep = ''), 
+            width = 6, height = 4, units = 'in', res = 300)
+Soft_Coral
+dev.off()
+
+
+
+
+
+```
+
+
+```{r SITES}
+
+setwd("C:/OneDrive/C2_Coms")
+alldata <- read.csv("24_NS_AllDataCombined_ForFigures.csv", header = T, row.names = 1)
+alldata$Rock <- alldata$Rock * 100
+alldata$Sand <- alldata$Sand * 100
+
+SiteSum <- alldata %>% group_by(Site) %>% summarise(mean(Lat), mean(Long),
+                                                     mean(Bottom_Depth, na.rm = TRUE), sd(Bottom_Depth, na.rm = TRUE),
+                                                      mean(TEMP, na.rm = TRUE), sd(TEMP, na.rm = TRUE),
+                                                       mean(Saturation_opt, na.rm = TRUE), sd(Saturation_opt, na.rm = TRUE),
+                                                       mean(CDOM, na.rm = TRUE), mean(CPHL, na.rm = TRUE),
+                                                  mean(Rock, na.rm = TRUE), mean(Pebble_Gravel, na.rm = TRUE), 
+                                                  mean(Sand, na.rm = TRUE),
+                                                  sum(CLUSTER1), sum(CLUSTER2), sum(CLUSTER3), sum(CLUSTER4), sum(CLUSTER5),
+                                                  sum(CLUSTER6), sum(CLUSTER7), sum(CLUSTER8), sum(CLUSTER9), sum(CLUSTER10),
+                                                  sum(CLUSTER11), sum(CLUSTER12))
+colnames(SiteSum)<- c("Site" ,"Lat", "Long", "Depth", "sd_Depth", "Temperature", "sd_Temp", "Saturation", 
+                       "sd_Saturation", "CDOM", "Chlorophyll-A", "Rock", "Pebble/Gravel", "Sand", "Cluster1",
+                       "Cluster2","Cluster3","Cluster4","Cluster5","Cluster6","Cluster7","Cluster8","Cluster9",
+                       "Cluster10","Cluster11","Cluster12")
+SiteSum <- SiteSum[-16,]
+
+write.csv(SiteSum, "26_SiteSummaryData.csv")
+
+
+ggplot(alldata, aes(x=Site, fill = as.factor(CLUSTER))) + 
+  geom_bar(position = "fill", colour = "black") +
+  scale_y_continuous(labels = percent) +
+  scale_fill_grey(start = 0, end = 1) +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+  labs(x = "Site", y = "Proportion Communities (%)") +
+  theme(axis.title.x = element_text(face="bold")) +
+  theme(axis.title.y = element_text(face="bold")) +
+  guides(fill = guide_legend(reverse=FALSE, title= NULL))
+
+ggplot(alldata, aes(x=Site, fill = as.factor(Group))) + 
+  geom_bar(position = "fill", colour = "black") +
+  scale_y_continuous(labels = percent) +
+  scale_fill_grey(start = 0, end = 1) +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+  labs(x = "Site", y = "Proportion Communities (%)") +
+  theme(axis.title.x = element_text(face="bold")) +
+  theme(axis.title.y = element_text(face="bold")) +
+  guides(fill = guide_legend(reverse=FALSE, title= NULL)) +
+  scale_fill_manual(values = c("#009900", "#0000FF", "#660000", "#003300", "#FF0000")) 
+
+# colour blind palette
+# The palette with grey:
+cbPalette <- c("#D55E00", "#56B4E9", "#E69F00", "#0072B2", "#009E73", "#F0E442", "#999999", "#CC79A7")
+# To use for fills, add
+#  scale_fill_manual(values=cbPalette)
+
+PieCharts <- ggplot(alldata, aes(x="", fill = as.factor(Group))) + 
+                geom_bar(position = "fill", colour = "black") +
+                scale_y_continuous(labels = percent) +
+                labs(x = "Site", y = "Proportion Communities (%)") +
+                theme(axis.title.x = element_text(face="bold")) +
+                theme(axis.title.y = element_text(face="bold")) +
+                guides(fill = guide_legend(reverse=FALSE, title= NULL)) +
+                # scale_fill_manual(values = c("#009900", "#0000FF", "#660000", "#003300", "#FF0000")) +
+                scale_fill_manual(values=cbPalette) +
+                facet_grid(facets =.~Site) +
+                coord_polar(theta="y") +
+                theme(axis.text.x=element_blank())
+
+setwd("C:/OneDrive/C2_Coms/FIGURES")
+png(file = paste('Site_Community_Charts.png', sep = ''), 
+            width = 16, height = 4, units = 'in', res = 300)
+PieCharts
+dev.off()
+
+```
+
+
+```{r ENVIORNMENTAL PLOTS, warning = FALSE}
+
+#########################
+## ENVIRONMENTAL PLOTS ##
+#########################
+
+lightplot<- ggplot(env,aes(x = Depth1_lic, y = Energy1_lic, colour = Area)) +
+  geom_smooth(se= FALSE, size = 1) +
+  xlab("Depth (m)") +
+  ylab ("Light Energy (E m-2 s-1)") +
+  theme_bw() +
+  scale_y_continuous(expand = c(0, 0)) +
+  scale_x_continuous(expand = c(0, 0), limits = c(0,50)) +
+  theme(axis.title.x = element_blank(), axis.text.x = element_blank())
+
+
+tempplot<- ggplot(env,aes(x = Depth1_ctd, y = Temp_ctd, colour = Area)) +
+  geom_smooth(se= FALSE, size = 1) +
+  xlab("Depth (m)") +
+  ylab ("Temperature (°C)") +
+  theme_bw() +
+  scale_y_continuous(expand = c(0, 0), limits = c(23, 24.5)) +
+  scale_x_continuous(expand = c(0, 0), limits = c(0,50)) +
+  theme(axis.title.x = element_blank(), axis.text.x = element_blank()) 
+
+
+oxyplot<- ggplot(env,aes(x = Depth_opt , y = Saturation_opt, colour = Area)) +
+  geom_smooth(se= FALSE, size = 1) +
+  xlab("Depth (m)") +
+  ylab ("Oxygen Saturation (%)") +
+  theme_bw() +
+  scale_y_continuous(expand = c(0, 0), limits=c(75,95)) +
+  scale_x_continuous(expand = c(0, 0), limits = c(0,50))  
+
+
+grid.arrange(lightplot, tempplot, oxyplot, nrow = 3)
+
+```
+
+
+

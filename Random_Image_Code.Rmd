@@ -1,0 +1,201 @@
+---
+title: "Selecting Random Images"
+author: "Joe Turner"
+date: "19 December 2016"
+output: pdf_document
+---
+
+```{r randomise by number of images}
+
+setwd("C:/Users/TUR262/OneDrive/Documents/PhD/PhD_Chapters/Chapter_2_Mesophotic_Communities/Data")
+images<-read.csv("All_Images_and_Env_Merge.csv", header = T)
+images$Local_Time <- as.POSIXct(images$Date_Time.1, format="%Y%m%d %H%M%S", tz = "Asia/Tokyo") # 9 hour difference
+images$UTC.Time <- with_tz(images$Local_Time, tz = "UTC")
+
+setseed(37)
+
+hb01<-subset(images, Site == "hb01_fs")
+hb02_2nd<- subset(images, Site == "hb02_2nd")
+hb03<- subset(images, Site == "hb03")
+hb04<- subset(images, Site == "hb04")
+mg01<- subset(images, Site == "mg01")
+mg02<- subset(images, Site == "mg02")
+mg03<- subset(images, Site == "mg03")
+mu01<- subset(images, Site == "mu01")
+mu02<- subset(images, Site == "mu02")
+mu03<- subset(images, Site == "mu03")
+tb01<- subset(images, Site == "tb01")
+tb02<- subset(images, Site == "tb02")
+tb03<- subset(images, Site == "tb03")
+
+window<-10 
+sampleSize <-1
+
+s1<-hb01[,c(8,59)]
+colnames(s1)<- c("FileName", "DateTime")
+groups1<-seq(1, nrow(s1), by=window) #indexes of first element in each window
+result_hb01<-lapply(groups1, function(x) s1[sample(x:(x+window-1), sampleSize), "FileName"]) #for each group, randomly select sampleSize number of elements
+
+s2<-hb02_2nd[,c(8,59)]
+colnames(s2)<- c("FileName", "DateTime")
+groups2<-seq(1, nrow(s2), by=window) #indexes of first element in each window
+result_hb02<-lapply(groups2, function(x) s2[sample(x:(x+window-1), sampleSize), "FileName"]) #for each group, randomly select sampleSize number of elements
+
+s3<-hb03[,c(8,59)]
+colnames(s3)<- c("FileName", "DateTime")
+groups3<-seq(1, nrow(s3), by=window) #indexes of first element in each window
+result_hb03<-lapply(groups3, function(x) s3[sample(x:(x+window-1), sampleSize), "FileName"]) #for each group, randomly select sampleSize number of elements
+
+s4<-hb04[,c(8,59)]
+colnames(s4)<- c("FileName", "DateTime")
+groups4<-seq(1, nrow(s4), by=window) #indexes of first element in each window
+result_hb04<-lapply(groups4, function(x) s4[sample(x:(x+window-1), sampleSize), "FileName"]) #for each group, randomly select sampleSize number of elements
+
+
+setwd("C:/Users/TUR262/OneDrive/Documents/PhD/PhD_Chapters/Chapter_2_Mesophotic_Communities/Data/Random_Images")
+write.csv(result_hb01, "random_images_hb01.csv")
+write.csv(result_hb02, "random_images_hb02.csv")
+write.csv(result_hb03, "random_images_hb03.csv")
+write.csv(result_hb04, "random_images_hb04.csv")
+write.csv(result_mg01, "random_images_mg01.csv")
+write.csv(result_mg03, "random_images_mg03.csv")
+write.csv(result_mu01, "random_images_mu01.csv")
+write.csv(result_mu02, "random_images_mu02.csv")
+write.csv(result_mu03, "random_images_mu03.csv")
+write.csv(result_tb01, "random_images_tb01.csv")
+write.csv(result_tb02, "random_images_tb02.csv")
+write.csv(result_tb03, "random_images_tb03.csv")
+
+random<-read.csv("all_sites_random_images.csv")
+merge<- merge(random, images, by.x = "FILENAME", by.y = "FILENAME")
+
+
+```
+
+
+```{r randomise by time slot}
+########################
+#### GENERAL CODE ####
+#######################
+
+s<-data.frame(DateTime=as.POSIXct("2016-11-02 10:40:00") + sample(1:200, 100, replace = T))
+s$FileName<-paste0("file-",rownames(s),"-",format(s$DateTime, "%H%M%S"))
+s<-s[order(s$DateTime ),] #Order date time from old to recent
+
+sampleSize <-1
+window.sec<- 30
+
+split <- seq(min(s$DateTime), max(s$DateTime), by=(window.sec+1)) # splitting into groups
+split
+#[1] "2016-11-02 10:40:02 MYT" "2016-11-02 10:40:28 MYT" "2016-11-02 10:40:54 MYT" "2016-11-02 10:41:20 MYT" "2016-11-02 10:41:46 MYT"
+#[6] "2016-11-02 10:42:12 MYT" "2016-11-02 10:42:38 MYT" "2016-11-02 10:43:04 MYT"
+
+groups<- c( sapply(split, function(x) min(which(s$DateTime>=x))) , nrow(s))  #indexes of first element in each group, and include the last index. 
+#The first element in each group can be more recent than that in the split, if x is n.
+s[groups,]
+# DateTime       FileName
+# 56 2016-11-02 10:40:02 file-56-104002
+# 53 2016-11-02 10:40:30 file-53-104030
+# 60 2016-11-02 10:40:56 file-60-104056
+# 95 2016-11-02 10:41:20 file-95-104120
+# 81 2016-11-02 10:41:46 file-81-104146
+# 57 2016-11-02 10:42:12 file-57-104212
+# 39 2016-11-02 10:42:39 file-39-104239
+# 59 2016-11-02 10:43:04 file-59-104304
+# 75 2016-11-02 10:43:20 file-75-104320
+
+result<-lapply(1:(length(groups)-1), function(i) s[sample(groups[i]:(groups[i+1]-1), sampleSize), "FileName"])
+names(result) <- as.character(split)
+
+
+#########################
+#### APPLIED TO DATA ####
+##########################
+
+library(lubridate)
+setwd("C:/Users/TUR262/OneDrive/Documents/PhD/PhD_Chapters/Chapter_2_Mesophotic_Communities/Data")
+images<-read.csv("All_Images_and_Env_Merge.csv", header = T)
+images$Local_Time <- as.POSIXct(images$Date_Time.1, format="%Y%m%d %H%M%S", tz = "Asia/Tokyo") # 9 hour difference
+images$UTC.Time <- with_tz(images$Local_Time, tz = "UTC")
+
+set.seed(37)
+
+hb01<-subset(images, Site == "hb01_fs")
+hb02_2nd<- subset(images, Site == "hb02_2nd")
+hb03<- subset(images, Site == "hb03")
+hb04<- subset(images, Site == "hb04")
+mg01<- subset(images, Site == "mg01")
+mg03<- subset(images, Site == "mg03")
+mu01<- subset(images, Site == "mu01")
+mu02<- subset(images, Site == "mu02")
+mu03<- subset(images, Site == "mu03")
+tb01<- subset(images, Site == "tb01")
+tb02<- subset(images, Site == "tb02")
+tb03<- subset(images, Site == "tb03")
+
+setwd("C:/Users/TUR262/OneDrive/Documents/PhD/PhD_Chapters/Chapter_2_Mesophotic_Communities/Data/Random_Images/sites")
+write.csv(hb01, "hb01.csv")
+write.csv(hb02_2nd, "hb02_2nd.csv")
+write.csv(hb03, "hb03.csv")
+write.csv(hb04, "hb04.csv")
+write.csv(mg01, "mg01.csv")
+write.csv(mg03, "mg03.csv")
+write.csv(mu01, "mu01.csv")
+write.csv(mu01, "mu02.csv")
+write.csv(mu01, "mu03.csv")
+write.csv(tb01, "tb01.csv")
+write.csv(tb01, "tb02.csv")
+write.csv(tb01, "tb03.csv")
+
+
+# SET SAMPLE AND WINDOW SIZE
+sampleSize <-1
+window.sec<- 30
+
+# REPEAT CODE FOR EACH SITE
+s<-hb01[,c(8,59)]
+s<-hb02_2nd[,c(8,59)]
+s<-hb03[,c(8,59)]
+s<-hb04[,c(8,59)]
+s<-mg01[,c(8,59)]
+s<-mg03[,c(8,59)]
+s<-mu01[,c(8,59)]
+s<-mu02[,c(8,59)]
+s<-mu03[,c(8,59)]
+s<-tb01[,c(8,59)]
+s<-tb02[,c(8,59)]
+s<-tb03[,c(8,59)]
+
+colnames(s)<- c("FileName", "DateTime")
+s<-s[order(s$DateTime ),] #Order date time from old to recent
+
+split <- seq(min(s$DateTime), max(s$DateTime), by=(window.sec+1)) 
+split
+groups<- c( sapply(split, function(x) min(which(s$DateTime>=x))) , nrow(s)) 
+s[groups,]
+result<-lapply(1:(length(groups)-1), function(i) s[sample(groups[i]:(groups[i+1]-1), sampleSize), "FileName"])
+names(result) <- as.character(split)
+
+#CHANGE THE FILENAME TO "SITE_RANDOM_RESULT" AT THE END OF EACH RUN
+setwd("C:/Users/TUR262/OneDrive/Documents/PhD/PhD_Chapters/Chapter_2_Mesophotic_Communities/Data/Random_Images")
+write.csv(result, "tb03_random_images_30_sec.csv")
+
+
+```
+
+
+Merge selected images with environmental data and look if already analysed
+
+```{r}
+
+setwd("C:/Users/TUR262/OneDrive/Documents/PhD/PhD_Chapters/Chapter_2_Mesophotic_Communities/Data/Random_Images")
+random<-read.csv("All_Sites_Random_Images_30_sec.csv")
+merge<- merge(random, images, by.x = "FILENAME", by.y = "FILENAME")
+write.csv(merge, "Merge_all_random_images_30_sec.csv")
+
+old<- read.csv("OLD_Analysed_Images_for_ESA_OIPS.csv")
+analysed<- merge(random, old, by.x = "FILENAME", by.y = "FILENAME")
+write.csv(analysed, "ANALYSED_random_images_30_sec.csv")
+
+```
+

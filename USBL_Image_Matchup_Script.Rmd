@@ -1,0 +1,187 @@
+---
+title: "Matching USBL data to Images"
+author: "Joe Turner"
+date: "14 December 2016"
+output: pdf_document
+---
+
+
+```{r USBL data}
+
+library(lubridate)
+library(zoo)
+
+setwd("C:/Users/TUR262/OneDrive/Documents/PhD/PhD_Chapters/Chapter_2_Mesophotic_Communities/Data/USBL")
+
+file_list<-list.files(pattern="*.txt")
+
+    DF <- NULL
+        for (f in file_list) {
+        dat <- read.table(f, header=T, sep=",", colClasses = "character")
+        dat$site<- rep(paste(f), nrow(dat))
+        DF <- rbind(DF, dat)
+        }
+    
+unique<- subset(DF, !duplicated(Easting))
+
+write.csv(unique, file = "USBL_Unique.csv")
+write.csv(DF, file = "USBL_All_Sites.csv")
+write.table(unique, file = "USBL_Unique.txt", sep= ",", row.names=FALSE)
+
+unique$date <- ifelse(unique$site== "hb01_fs.txt", "20161102",
+        ifelse(unique$site== "hb01_fs.txt", "20161102",
+        ifelse(unique$site== "hb02_2nd.txt", "20161102",
+        ifelse(unique$site== "hb03.txt", "20161102",
+        ifelse(unique$site== "hb04.txt", "20161102",
+        ifelse(unique$site== "mg01.txt", "20161104",
+        ifelse(unique$site== "mg02.txt", "20161104",
+        ifelse(unique$site== "mg03.txt", "20161104",
+        ifelse(unique$site== "tb01.txt" & unique$Msg.Time > 42677.33329, "20161103",
+        ifelse(unique$site== "tb01.txt" & unique$Msg.Time < 42677.33329, "20161102",      
+        ifelse(unique$site== "tb02.txt", "20161103",
+        ifelse(unique$site== "tb03.txt", "20161103",
+        ifelse(unique$site== "mu01.txt", "20161104",
+        ifelse(unique$site== "mu02.txt", "20161104",
+        ifelse(unique$site== "mu03.txt", "20161104",
+                        NA  ))))))))))))))) 
+
+unique$Time <- as.POSIXct(paste(unique$date, unique$UTC.Time), format="%Y%m%d %H%M%S", tz = "UTC")
+unique$Local_Time<- unique$Time + hours(9)
+
+write.csv(unique, file = "USBL_Unique.csv")
+
+setwd("C:/Users/TUR262/OneDrive/Documents/PhD/PhD_Chapters/Chapter_2_Mesophotic_Communities/Data")
+images<-read.csv("All_Images_and_Env_Merge.csv", header = T)
+images$Local_Time <- as.POSIXct(images$Date_Time.1, format="%Y%m%d %H%M%S", tz = "Asia/Tokyo") # 9 hour difference
+images$UTC.Time <- with_tz(images$Local_Time, tz = "UTC")
+
+write.csv(images, file = "images.csv")
+
+merge<-merge(unique, images, by.x = "Time", by.y = "UTC.Time")
+merge[c(2:3, 7:8, 10)] <- list(NULL)
+write.csv(merge, file = "merge.csv")
+
+
+# Interpolate http://stackoverflow.com/questions/26806140/interpolate-coordinates-at-unrecorded-timestamps
+# Need to do for each site seperately
+# Below is linear
+
+hb01_fs<- subset(unique, site == "hb01_fs.txt")
+full.time    <- with(hb01_fs,seq(Time[1],tail(Time,1),by=1))
+df.zoo <- zoo(hb01_fs[,3:4],hb01_fs$Time)        # convert to zoo object
+resulthb01 <- na.approx(df.zoo,xout=full.time)  # interpolate; result is also a zoo object
+head(resulthb01)
+
+hb02_2nd<- subset(unique, site == "hb02_2nd.txt")
+full.time    <- with(hb02_2nd,seq(Time[1],tail(Time,1),by=1))
+df.zoo <- zoo(hb02_2nd[,3:4],hb02_2nd$Time)        # convert to zoo object
+resulthb02 <- na.approx(df.zoo,xout=full.time)  # interpolate; result is also a zoo object
+head(resulthb02)
+
+hb03<- subset(unique, site == "hb03.txt")
+full.time    <- with(hb03,seq(Time[1],tail(Time,1),by=1))
+df.zoo <- zoo(hb03[,3:4],hb03$Time)        # convert to zoo object
+resulthb03 <- na.approx(df.zoo,xout=full.time)  # interpolate; result is also a zoo object
+head(resulthb03)
+
+hb04<- subset(unique, site == "hb04.txt")
+full.time    <- with(hb04,seq(Time[1],tail(Time,1),by=1))
+df.zoo <- zoo(hb04[,3:4],hb04$Time)        # convert to zoo object
+resulthb04 <- na.approx(df.zoo,xout=full.time)  # interpolate; result is also a zoo object
+head(resulthb04)
+
+mg01<- subset(unique, site == "mg01.txt")
+full.time    <- with(mg01,seq(Time[1],tail(Time,1),by=1))
+df.zoo <- zoo(mg01[,3:4],mg01$Time)        # convert to zoo object
+resultmg01 <- na.approx(df.zoo,xout=full.time)  # interpolate; result is also a zoo object
+head(resultmg01)
+
+mg02<- subset(unique, site == "mg02.txt")
+full.time    <- with(mg02,seq(Time[1],tail(Time,1),by=1))
+df.zoo <- zoo(mg02[,3:4],mg02$Time)        # convert to zoo object
+resultmg02 <- na.approx(df.zoo,xout=full.time)  # interpolate; result is also a zoo object
+head(resultmg02)
+
+mg03<- subset(unique, site == "mg03.txt")
+full.time    <- with(mg03,seq(Time[1],tail(Time,1),by=1))
+df.zoo <- zoo(mg03[,3:4],mg03$Time)        # convert to zoo object
+resultmg03 <- na.approx(df.zoo,xout=full.time)  # interpolate; result is also a zoo object
+head(resultmg03)
+
+mu01<- subset(unique, site == "mu01.txt")
+full.time    <- with(mu01,seq(Time[1],tail(Time,1),by=1))
+df.zoo <- zoo(mu01[,3:4],mu01$Time)        # convert to zoo object
+resultmu01 <- na.approx(df.zoo,xout=full.time)  # interpolate; result is also a zoo object
+head(resultmu01)
+
+mu02<- subset(unique, site == "mu02.txt")
+full.time    <- with(mu02,seq(Time[1],tail(Time,1),by=1))
+df.zoo <- zoo(mu02[,3:4],mu02$Time)        # convert to zoo object
+resultmu02 <- na.approx(df.zoo,xout=full.time)  # interpolate; result is also a zoo object
+head(resultmu02)
+
+mu03<- subset(unique, site == "mu03.txt")
+full.time    <- with(mu03,seq(Time[1],tail(Time,1),by=1))
+df.zoo <- zoo(mu03[,3:4],mu03$Time)        # convert to zoo object
+resultmu03 <- na.approx(df.zoo,xout=full.time)  # interpolate; result is also a zoo object
+head(resultmu03)
+
+tb01<- subset(unique, site == "tb01.txt")
+full.time    <- with(tb01,seq(Time[1],tail(Time,1),by=1))
+df.zoo <- zoo(tb01[,3:4],tb01$Time)        # convert to zoo object
+resulttb01 <- na.approx(df.zoo,xout=full.time)  # interpolate; result is also a zoo object
+head(resulttb01)
+
+tb02<- subset(unique, site == "tb02.txt")
+full.time    <- with(tb02,seq(Time[1],tail(Time,1),by=1))
+df.zoo <- zoo(tb02[,3:4],tb02$Time)        # convert to zoo object
+resulttb02 <- na.approx(df.zoo,xout=full.time)  # interpolate; result is also a zoo object
+head(resulttb02)
+
+tb03<- subset(unique, site == "tb03.txt")
+full.time    <- with(tb03,seq(Time[1],tail(Time,1),by=1))
+df.zoo <- zoo(tb03[,3:4],tb03$Time)        # convert to zoo object
+resulttb03 <- na.approx(df.zoo,xout=full.time)  # interpolate; result is also a zoo object
+head(resulttb03)
+
+
+setwd("C:/Users/TUR262/OneDrive/Documents/PhD/PhD_Chapters/Chapter_2_Mesophotic_Communities/Data/USBL/Interpolated")
+write.zoo(resulthb01, file = "hb01_fs_Interpolation.txt")
+write.zoo(resulthb02, file = "hb02_2nd_Interpolation.txt")
+write.zoo(resulthb03, file = "hb03_Interpolation.txt")
+write.zoo(resulthb04, file = "hb04_Interpolation.txt")
+write.zoo(resultmg01, file = "mg01_Interpolation.txt")
+write.zoo(resultmg02, file = "mg02_Interpolation.txt")
+write.zoo(resultmg03, file = "mg03_Interpolation.txt")
+write.zoo(resultmu01, file = "mu01_Interpolation.txt")
+write.zoo(resultmu02, file = "mu02_Interpolation.txt")
+write.zoo(resultmu03, file = "mu03_Interpolation.txt")
+write.zoo(resulttb01, file = "tb01_Interpolation.txt")
+write.zoo(resulttb02, file = "tb02_Interpolation.txt")
+write.zoo(resulttb03, file = "tb03_Interpolation.txt")
+
+temp <- list.files(pattern="*.txt")
+    Interp <- NULL
+        for (f in temp) {
+        dat <- read.csv(f, header=F, sep=" ", colClasses = "character")
+        dat$site<- rep(paste(f), nrow(dat))
+        Interp <- rbind(Interp, dat)
+        }
+    
+colnames(Interp)<-c("Date", "Time", "Easting", "Northing", "Site")
+Interp<-Interp[ which( ! Interp$Date %in% "Index") , ]
+Interp$Date<- as.factor(Interp$Date)
+Interp$Time<- as.factor(Interp$Time)
+Interp$UTC_Time <- as.POSIXct(paste(Interp$Date, Interp$Time), format="%Y-%m-%d %H:%M:%S", "UTC")
+write.csv(Interp, "Interp_All_Sites.csv")
+
+merge<-merge(Interp, images, by.x = "UTC_Time", by.y = "UTC.Time")
+merge[c(2:3, 6:10)] <- list(NULL)
+
+setwd("C:/Users/TUR262/OneDrive/Documents/PhD/PhD_Chapters/Chapter_2_Mesophotic_Communities/Data")
+write.csv(merge, file = "merge.csv")
+helbybanks<- subset(merge, Area == "Helby Banks")
+othersites<- subset(merge, Area != "Helby Banks")
+write.csv(helbybanks, file = "Helby_Banks_Sites_Image_Merge_UTM50S.csv")
+write.csv(othersites, file = "Other_Sites_Image_Merge_UTM49S.csv")
+

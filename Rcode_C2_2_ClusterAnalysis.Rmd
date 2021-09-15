@@ -1,0 +1,2087 @@
+---
+title: "C2_2_ClusterAnalysis"
+author: "Joe Turner"
+date: "11 May 2017"
+output: pdf_document
+---
+
+
+```{r}
+
+library(plyr)
+library(vegan)
+library(doBy)
+library(rgdal)
+library(clustsig)
+library(gdata)
+library(ggplot2)
+library(scales)
+library(ggrepel)
+library(RColorBrewer)
+library(reshape2)
+library(reshape)
+library(grid)
+library(dplR)
+library(gridExtra)
+library(ecodist)
+library(pvclust)
+library(mclust)
+library(factoextra)
+library(NbClust)
+library(cluster)
+library(dplyr)
+library(reshape2)
+st.err <- function(x) {sd(x)/sqrt(length(x))}
+
+```
+
+```{r ALL DATA}
+
+##################
+## PREPARE DATA ##
+##################
+
+setwd("C:/OneDrive/C2_Coms")
+
+detail <- read.csv("11_Detail_ALLDATA_Matrix.csv", header = TRUE, row.names = 1)
+broad <- read.csv("12_Broad_ALLDATA_Matrix.csv", header = TRUE, row.names = 1)
+
+# Transform data SQRT
+detail <- sqrt(detail)
+broad <- sqrt(broad)
+
+# set seed as can change between runs
+set.seed(3)
+
+################################
+#### HIERACHICAL CLUSTERING ####
+################################
+
+#################
+## DENDROGRAMS ##
+#################
+
+dist.res <- vegdist(broad, method = "bray") # Disimilarit matrix
+hc <- hclust(dist.res, method = "complete") # Hierarchical clustering results
+par(mfrow = c(1,1)) # Visualization of hclust
+plot(hc, labels = FALSE, hang = -1)
+rect.hclust(hc, k = 6, border = 2:7) # Add rectangle around 6 groups
+hc.cut <- cutree(hc, k = 6) # Cut into 6 groups
+head(hc.cut, 20)
+
+# Repeat for Detail matrix
+dist.res2 <- vegdist(detail, method = "bray")
+hc2 <- hclust(dist.res2, method = "complete")
+par(mfrow = c(1,1))
+plot(hc2, labels = FALSE, hang = -1)
+rect.hclust(hc2, k = 6, border = 2:13) 
+hc.cut2 <- cutree(hc2, k = 6)
+head(hc.cut2, 20)
+
+
+###############
+## MDS PLOTS ##
+###############
+
+MDS <- metaMDS(broad, distance="bray", k=2, autotransform = TRUE, trace = FALSE, trymax = 100)
+plot(MDS)
+summary(MDS)
+
+MDS2 <- metaMDS(detail, distance="bray", k=2, autotransform = TRUE, trace = FALSE, trymax = 100)
+plot(MDS2)
+summary(MDS2)
+
+# Save points
+MDSpoints <- MDS$points
+MDS2points <- MDS2$points
+setwd("C:/OneDrive/C2_Coms/MDS_Points")
+write.csv(MDSpoints, "1_BROAD_ALLDATA_MDSpoints.csv")
+write.csv(MDS2points, "2_DETAIL_ALLDATA_MDSpoints.csv")
+
+
+
+#####################################
+#### NON HIERARCHICAL CLUSTERING ####
+#####################################
+
+# https://www.r-bloggers.com/finding-optimal-number-of-clusters/
+# http://www.sthda.com/english/wiki/determining-the-optimal-number-of-clusters-3-must-known-methods-unsupervised-machine-learning
+
+#######################################
+## DETERMINE OPTIMAL CLUSTER NUMBERS ##
+#######################################
+
+setwd("C:/OneDrive/C2_Coms/R_Figures")
+par(mfrow=c(1,1))
+
+## ELBOW METHOD ##
+wss <- (nrow(broad)-1)*sum(apply(broad,2,var))
+  for (i in 1:20) wss[i] <- sum(kmeans(broad, centers=i)$withinss)
+plot(1:20, wss, type="b",
+     pch = 19, frame = FALSE,
+     xlab="Number of Clusters",
+     ylab="Within groups sum of squares")
+
+wss2 <- (nrow(detail)-1)*sum(apply(detail,2,var))
+  for (i in 1:20) wss2[i] <- sum(kmeans(detail, centers=i)$withinss)
+plot(1:20, wss2, type="b",
+     pch = 19, frame = FALSE,
+     xlab="Number of Clusters",
+     ylab="Within groups sum of squares")
+
+
+png(file = paste('BROAD_ALLDATA_Elbow.png'),width = 4, height = 4, units = 'in', res = 300)
+plot(1:20, wss, type="b", pch = 19, frame = FALSE, xlab="Number of Clusters", ylab="Within groups sum of squares")
+dev.off()
+png(file = paste('DETAIL_ALLDATA_Elbow.png'),width = 4, height = 4, units = 'in', res = 300)
+plot(1:20, wss2, type="b", pch = 19, frame = FALSE, xlab="Number of Clusters", ylab="Within groups sum of squares")
+dev.off()
+
+
+## BIC ##
+d_clust <- Mclust(broad, G=1:20,modelNames = mclust.options("emModelNames"))
+d_clust$BIC
+# BROAD: 16, 15 and 14 are best
+
+d_clust2 <- Mclust(detail, G=1:20, modelNames = mclust.options("emModelNames"))
+d_clust2$BIC
+# DETAIL: 12, 14, and 11 are best
+
+
+
+
+## GAP STATISTIC ##
+gap_stat <- clusGap(broad, FUN = kmeans, nstart = 25, K.max = 20, B = 500)
+print(gap_stat, method = "firstmax")
+plot(gap_stat, frame = FALSE, xlab = "Number of clusters k")
+fviz_gap_stat(gap_stat)
+# BROAD: 14 clusters appears best
+
+gap_stat2 <- clusGap(detail, FUN = kmeans, nstart = 25, K.max = 20, B = 500)
+print(gap_stat2, method = "firstmax")
+plot(gap_stat2, frame = FALSE, xlab = "Number of clusters k")
+fviz_gap_stat(gap_stat2)
+# DETAIL: 13 clusters appears best
+
+png(file = paste('BROAD_ALLDATA_GAPstat.png'),width = 8, height = 4, units = 'in', res = 300)
+fviz_gap_stat(gap_stat)
+dev.off()
+png(file = paste('DETAIL_ALLDATA_GAPstat.png'),width = 8, height = 4, units = 'in', res = 300)
+fviz_gap_stat(gap_stat2)
+dev.off()
+
+
+
+## NB CLUST ##
+nb <- NbClust(broad, diss=NULL, distance = "euclidean", min.nc=5, max.nc=20, method = "kmeans",
+              index = "all", alphaBeale = 0.1)
+hist(nb$Best.nc[1,], breaks = max(na.omit(nb$Best.nc[1,])))
+fviz_nbclust(nb) + theme_minimal()
+# All gap statistic values
+nb$All.index
+# Best number of clusters
+nb$Best.nc
+# Best partition
+nb$Best.partition
+par(mfrow=c(1,1))
+# BROAD: 5 clusters most common (7 times) then 19 and 12 (3 times)
+
+nb2 <- NbClust(detail, diss=NULL, distance = "euclidean", 
+              min.nc=5, max.nc=20, method = "kmeans", 
+              index = "all", alphaBeale = 0.1)
+hist(nb2$Best.nc[1,], breaks = max(na.omit(nb2$Best.nc[1,])))
+fviz_nbclust(nb2) + theme_minimal()
+# DETAIL: 5 clusters most common (10 times) then 6 (7 times)
+
+png(file = paste('BROAD_ALLDATA_NBclust.png'),width = 8, height = 4, units = 'in', res = 300)
+fviz_nbclust(nb) + theme_minimal()
+dev.off()
+png(file = paste('DETAIL_ALLDATA_NBclust.png'),width = 8, height = 4, units = 'in', res = 300)
+fviz_nbclust(nb2) + theme_minimal()
+dev.off()
+
+
+############################
+#### K-MEANS CLUSTERING ####
+###########################
+
+# Put in values for the best cluster numbers
+
+Bcluster5 <- kmeans(broad, 5, nstart = 100)
+table(Bcluster5$clust)
+Bcluster5$tot.withinss
+
+Bcluster12 <- kmeans(broad, 12, nstart = 100)
+table(Bcluster12$clust)
+Bcluster12$tot.withinss
+
+Bcluster14 <- kmeans(broad, 14, nstart = 100)
+table(Bcluster14$clust)
+Bcluster14$tot.withinss
+
+Dcluster5 <- kmeans(detail, 5, nstart = 100)
+table(Dcluster5$clust)
+Dcluster5$tot.withinss
+
+Dcluster6 <- kmeans(detail, 6, nstart = 100)
+table(Dcluster6$clust)
+Dcluster6$tot.withinss
+
+Dcluster13 <- kmeans(detail, 13, nstart = 100)
+table(Dcluster13$clust)
+Dcluster13$tot.withinss
+
+
+# Visualize k-means clusters
+fviz_cluster(Bcluster5, data = broad, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm", 
+             ggtheme = theme_minimal(), main = FALSE)
+fviz_cluster(Bcluster12, data = broad, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm",
+             ggtheme = theme_minimal(), main = FALSE)
+fviz_cluster(Bcluster14, data = broad, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm",
+             ggtheme = theme_minimal(), main = FALSE)
+fviz_cluster(Dcluster5, data = detail, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm",
+             ggtheme = theme_minimal(), main = FALSE)
+fviz_cluster(Dcluster6, data = detail, geom = "point",pointsize = 2, stand = FALSE, ellipse.type = "norm",
+             ggtheme = theme_minimal(), main = FALSE)
+fviz_cluster(Dcluster13, data = detail, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm", 
+             ggtheme = theme_minimal(), main = FALSE)
+
+
+
+# Export results to data frame
+kClusters <- data.frame(Bcluster5$cluster)
+colnames(kClusters)[1] <- "Broad5"
+kClusters$Broad12 <- Bcluster12$cluster
+kClusters$Broad14 <- Bcluster14$cluster
+kClusters$Detail5 <- Dcluster5$cluster
+kClusters$Detail6 <- Dcluster6$cluster
+kClusters$Detail13 <- Dcluster13$cluster
+setwd("C:/OneDrive/C2_Coms/Cluster_Summaries")
+write.csv(kClusters, "1_ALLDATA_kMeans_Cluster_Numbers.csv")
+
+
+# Export plots
+setwd("C:/OneDrive/C2_Coms/R_Figures")
+png(file = paste('BROAD_ALLDATA_kMeans_5.png'),width = 6, height = 4, units = 'in', res = 300)
+fviz_cluster(Bcluster5, data = broad, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm", 
+             ggtheme = theme_minimal(), main = FALSE)
+dev.off()
+png(file = paste('BROAD_ALLDATA_kMeans_12.png'),width = 6, height = 4, units = 'in', res = 300)
+fviz_cluster(Bcluster12, data = broad, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm", 
+             ggtheme = theme_minimal(), main = FALSE)
+dev.off()
+png(file = paste('BROAD_ALLDATA_kMeans_14.png'),width = 6, height = 4, units = 'in', res = 300)
+fviz_cluster(Bcluster14, data = broad, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm", 
+             ggtheme = theme_minimal(), main = FALSE)
+dev.off()
+png(file = paste('DETAIL_ALLDATA_kMeans_5.png'),width = 6, height = 4, units = 'in', res = 300)
+fviz_cluster(Dcluster5, data = detail, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm", 
+             ggtheme = theme_minimal(), main = FALSE)
+dev.off()
+png(file = paste('DETAIL_ALLDATA_kMeans_6.png'),width = 6, height = 4, units = 'in', res = 300)
+fviz_cluster(Dcluster6, data = detail, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm", 
+             ggtheme = theme_minimal(), main = FALSE)
+dev.off()
+png(file = paste('DETAIL_ALLDATA_kMeans_13.png'),width = 6, height = 4, units = 'in', res = 300)
+fviz_cluster(Dcluster13, data = detail, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm", 
+             ggtheme = theme_minimal(), main = FALSE)
+dev.off()
+
+setwd("C:/OneDrive/C2_Coms")
+env <- read.csv("25_AllDataCombined_ForFigures.csv", header = T, row.names = 1)
+
+#----Create Env summary tables-----
+sumDepthB5 <- summaryBy(Bottom_Depth ~ Broad5, data=env, FUN=c(range, mean))  # summarise depth by cluster giving min, max and mean.Replace variables with your exact column names
+colnames(sumDepthB5) <- c("Cluster","Min Depth","Max Depth","Mean Depth")
+sumDepthB5$ClustType <- rep("B5",nrow(sumDepthB5))
+sumDepthB12 <- summaryBy(Bottom_Depth ~ Broad12, data=env, FUN=c(range, mean))
+colnames(sumDepthB12) <- c("Cluster","Min Depth","Max Depth","Mean Depth")
+sumDepthB12$ClustType <- rep("B12",nrow(sumDepthB12))
+sumDepthB14 <- summaryBy(Bottom_Depth ~ Broad14, data=env, FUN=c(range, mean))
+colnames(sumDepthB14) <- c("Cluster","Min Depth","Max Depth","Mean Depth")
+sumDepthB14$ClustType <- rep("B14",nrow(sumDepthB14))
+sumDepthD6 <- summaryBy(Bottom_Depth ~ Detail6, data=env, FUN=c(range, mean))
+colnames(sumDepthD6) <- c("Cluster","Min Depth","Max Depth","Mean Depth")
+sumDepthD6$ClustType <- rep("D6",nrow(sumDepthD6))
+sumDepthD13 <- summaryBy(Bottom_Depth ~ Detail13, data=env, FUN=c(range, mean))
+colnames(sumDepthD13) <- c("Cluster","Min Depth","Max Depth","Mean Depth")
+sumDepthD13$ClustType <- rep("D13",nrow(sumDepthD13))
+sumDepthD5 <- summaryBy(Bottom_Depth ~ Detail5, data=env, FUN=c(range, mean))
+colnames(sumDepthD5) <- c("Cluster","Min Depth","Max Depth","Mean Depth")
+sumDepthD5$ClustType <- rep("D5",nrow(sumDepthD5))
+
+sumDepth <- rbind(sumDepthB5, sumDepthB12, sumDepthB14, sumDepthD5, sumDepthD6, sumDepthD13)
+setwd("C:/OneDrive/C2_Coms/Cluster_Summaries")
+write.csv(sumDepth, file = "2_ALLDATA_kMeanCluster_Depth_Summary.csv", row.names=FALSE)
+
+
+
+######################################
+#### PRINCIPAL COMPONENT ANALYSIS ####
+######################################
+
+pca <- rda(broad, scale = T)
+summary(pca, display = NULL) # 30% of variation explained by first 2 PC's
+scores(pca, choices = 1:2, display = "species", scaling = 0) # shows how each species is affected by PC1 and PC2
+plot(pca)
+
+pca2 <- rda(detail, scale = T)
+summary(pca2, display = NULL) # 30% of variation explained by first 2 PC's
+scores(pca2, choices = 1:2, display = "species", scaling = 0) # shows how each species is affected by PC1 and PC2
+plot(pca)
+
+```
+
+```{r ALL DATA PA}
+
+# Transform data PA
+detailPA <- detail
+detailPA[detailPA > 0] <- 1
+broadPA <- broad
+broadPA[broadPA > 0] <- 1
+
+# set seed as can change between runs
+set.seed(3)
+
+
+################################
+#### HIERACHICAL CLUSTERING ####
+################################
+
+#################
+## DENDROGRAMS ##
+#################
+
+dist.res <- vegdist(broadPA, method = "bray") # Disimilarit matrix
+hc <- hclust(dist.res, method = "complete") # Hierarchical clustering results
+par(mfrow = c(1,1)) # Visualization of hclust
+plot(hc, labels = FALSE, hang = -1)
+rect.hclust(hc, k = 6, border = 2:7) # Add rectangle around 6 groups
+hc.cut <- cutree(hc, k = 6) # Cut into 6 groups
+head(hc.cut, 20)
+
+# Repeat for detailPA matrix
+dist.res2 <- vegdist(detailPA, method = "bray")
+hc2 <- hclust(dist.res2, method = "complete")
+par(mfrow = c(1,1))
+plot(hc2, labels = FALSE, hang = -1)
+rect.hclust(hc2, k = 6, border = 2:13) 
+hc.cut2 <- cutree(hc2, k = 6)
+head(hc.cut2, 20)
+
+
+###############
+## MDS PLOTS ##
+###############
+
+MDS_PA <- metaMDS(broadPA, distance="bray", k=2, autotransform = TRUE, trace = FALSE, trymax = 100)
+plot(MDS_PA)
+summary(MDS_PA)
+
+MDS_PA2 <- metaMDS(detailPA, distance="bray", k=2, autotransform = TRUE, trace = FALSE, trymax = 100)
+plot(MDS_PA2)
+summary(MDS_PA2)
+
+# Save points
+MDS_PApoints <- MDS_PA$points
+MDS_PA2points <- MDS_PA2$points
+setwd("C:/OneDrive/C2_Coms/MDS_Points")
+write.csv(MDS_PApoints, "3_broadPA_ALLDATA_MDSpoints.csv")
+write.csv(MDS_PA2points, "4_detailPA_ALLDATA_MDSpoints.csv")
+
+# Stressplot
+stressplot(MDS_PA)
+gof <- goodness(MDS_PA)
+plot(MDS_PA, type = "t", main = "goodness of fit")
+points(MDS_PA, display = "sites", cex = gof*100)
+
+
+
+#####################################
+#### NON HIERARCHICAL CLUSTERING ####
+#####################################
+
+# https://www.r-bloggers.com/finding-optimal-number-of-clusters/
+# http://www.sthda.com/english/wiki/determining-the-optimal-number-of-clusters-3-must-known-methods-unsupervised-machine-learning
+
+#######################################
+## DETERMINE OPTIMAL CLUSTER NUMBERS ##
+#######################################
+
+mydata <- broadPA
+mydata2 <- detailPA
+
+setwd("C:/OneDrive/C2_Coms/R_Figures")
+par(mfrow=c(1,1))
+
+## ELBOW METHOD ##
+wss <- (nrow(mydata)-1)*sum(apply(mydata,2,var))
+  for (i in 1:20) wss[i] <- sum(kmeans(mydata, centers=i)$withinss)
+plot(1:20, wss, type="b",
+     pch = 19, frame = FALSE,
+     xlab="Number of Clusters",
+     ylab="Within groups sum of squares")
+
+wss2 <- (nrow(mydata2)-1)*sum(apply(mydata2,2,var))
+  for (i in 1:20) wss2[i] <- sum(kmeans(mydata2, centers=i)$withinss)
+plot(1:20, wss2, type="b",
+     pch = 19, frame = FALSE,
+     xlab="Number of Clusters",
+     ylab="Within groups sum of squares")
+
+
+png(file = paste('broadPA_ALLDATA_Elbow.png'),width = 4, height = 4, units = 'in', res = 300)
+plot(1:20, wss, type="b", pch = 19, frame = FALSE, xlab="Number of Clusters", ylab="Within groups sum of squares")
+dev.off()
+png(file = paste('detailPA_ALLDATA_Elbow.png'),width = 4, height = 4, units = 'in', res = 300)
+plot(1:20, wss2, type="b", pch = 19, frame = FALSE, xlab="Number of Clusters", ylab="Within groups sum of squares")
+dev.off()
+
+
+## BIC ##
+d_clust <- Mclust(mydata, G=1:20,modelNames = mclust.options("emModelNames"))
+d_clust$BIC
+# broadPA: 12, 13 and 11 are best
+
+d_clust2 <- Mclust(mydata2, G=1:20, modelNames = mclust.options("emModelNames"))
+d_clust2$BIC
+# detailPA: 19, 20, and 18 are best
+
+
+
+
+## GAP STATISTIC ##
+gap_stat <- clusGap(mydata, FUN = kmeans, nstart = 25, K.max = 20, B = 500)
+print(gap_stat, method = "firstmax")
+plot(gap_stat, frame = FALSE, xlab = "Number of clusters k")
+fviz_gap_stat(gap_stat)
+# broadPA: 11 clusters appears best
+
+gap_stat2 <- clusGap(mydata2, FUN = kmeans, nstart = 25, K.max = 20, B = 500)
+print(gap_stat2, method = "firstmax")
+plot(gap_stat2, frame = FALSE, xlab = "Number of clusters k")
+fviz_gap_stat(gap_stat2)
+# detailPA: 12 clusters appears best
+
+png(file = paste('broadPA_ALLDATA_GAPstat.png'),width = 8, height = 4, units = 'in', res = 300)
+fviz_gap_stat(gap_stat)
+dev.off()
+png(file = paste('detailPA_ALLDATA_GAPstat.png'),width = 8, height = 4, units = 'in', res = 300)
+fviz_gap_stat(gap_stat2)
+dev.off()
+
+
+
+## NB CLUST ##
+nb <- NbClust(mydata, diss=NULL, distance = "euclidean", min.nc=5, max.nc=20, method = "kmeans",
+              index = "all", alphaBeale = 0.1)
+hist(nb$Best.nc[1,], breaks = max(na.omit(nb$Best.nc[1,])))
+fviz_nbclust(nb) + theme_minimal()
+# All gap statistic values
+nb$All.index
+# Best number of clusters
+nb$Best.nc
+# Best partition
+nb$Best.partition
+par(mfrow=c(1,1))
+# broadPA: 17 clusters most common (8 times) then 5 (5 times)
+
+nb2 <- NbClust(mydata2, diss=NULL, distance = "euclidean", 
+              min.nc=5, max.nc=20, method = "kmeans", 
+              index = "all", alphaBeale = 0.1)
+hist(nb2$Best.nc[1,], breaks = max(na.omit(nb2$Best.nc[1,])))
+fviz_nbclust(nb2) + theme_minimal()
+# detailPA: 5 clusters most common (5 times) then 6 (4 times)
+
+png(file = paste('broadPA_ALLDATA_NBclust.png'),width = 8, height = 4, units = 'in', res = 300)
+fviz_nbclust(nb) + theme_minimal()
+dev.off()
+png(file = paste('detailPA_ALLDATA_NBclust.png'),width = 8, height = 4, units = 'in', res = 300)
+fviz_nbclust(nb2) + theme_minimal()
+dev.off()
+
+
+############################
+#### K-MEANS CLUSTERING ####
+###########################
+
+# Put in values for the best cluster numbers
+
+Bcluster5 <- kmeans(broadPA, 5, nstart = 100)
+table(Bcluster5$clust)
+Bcluster5$tot.withinss
+
+Bcluster11 <- kmeans(broadPA, 11, nstart = 100)
+table(Bcluster11$clust)
+Bcluster12$tot.withinss
+
+Bcluster17 <- kmeans(broadPA, 17, nstart = 100)
+table(Bcluster17$clust)
+Bcluster14$tot.withinss
+
+Dcluster5 <- kmeans(detailPA, 5, nstart = 100)
+table(Dcluster5$clust)
+Dcluster5$tot.withinss
+
+Dcluster6 <- kmeans(detailPA, 6, nstart = 100)
+table(Dcluster6$clust)
+Dcluster6$tot.withinss
+
+Dcluster12 <- kmeans(detailPA, 12, nstart = 100)
+table(Dcluster12$clust)
+Dcluster12$tot.withinss
+
+
+# Visualize k-means clusters
+fviz_cluster(Bcluster5, data = broadPA, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm", 
+             ggtheme = theme_minimal(), main = FALSE)
+fviz_cluster(Bcluster11, data = broadPA, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm",
+             ggtheme = theme_minimal(), main = FALSE)
+fviz_cluster(Bcluster17, data = broadPA, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm",
+             ggtheme = theme_minimal(), main = FALSE)
+fviz_cluster(Dcluster5, data = detailPA, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm",
+             ggtheme = theme_minimal(), main = FALSE)
+fviz_cluster(Dcluster6, data = detailPA, geom = "point",pointsize = 2, stand = FALSE, ellipse.type = "norm",
+             ggtheme = theme_minimal(), main = FALSE)
+fviz_cluster(Dcluster12, data = detailPA, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm", 
+             ggtheme = theme_minimal(), main = FALSE)
+
+
+
+# Export results to data frame
+kClusters <- data.frame(Bcluster5$cluster)
+colnames(kClusters)[1] <- "broadPA5"
+kClusters$broadPA11 <- Bcluster11$cluster
+kClusters$broadPA17 <- Bcluster17$cluster
+kClusters$detailPA5 <- Dcluster5$cluster
+kClusters$detailPA6 <- Dcluster6$cluster
+kClusters$detailPA12 <- Dcluster12$cluster
+setwd("C:/OneDrive/C2_Coms/Cluster_Summaries")
+write.csv(kClusters, "3_ALLDATA_PA_kMeans_Cluster_Numbers.csv")
+
+
+# Export plots
+setwd("C:/OneDrive/C2_Coms/R_Figures")
+png(file = paste('broadPA_ALLDATA_kMeans_5.png'),width = 6, height = 4, units = 'in', res = 300)
+fviz_cluster(Bcluster5, data = broadPA, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm", 
+             ggtheme = theme_minimal(), main = FALSE)
+dev.off()
+png(file = paste('broadPA_ALLDATA_kMeans_11.png'),width = 6, height = 4, units = 'in', res = 300)
+fviz_cluster(Bcluster11, data = broadPA, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm", 
+             ggtheme = theme_minimal(), main = FALSE)
+dev.off()
+png(file = paste('broadPA_ALLDATA_kMeans_17.png'),width = 6, height = 4, units = 'in', res = 300)
+fviz_cluster(Bcluster17, data = broadPA, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm", 
+             ggtheme = theme_minimal(), main = FALSE)
+dev.off()
+png(file = paste('detailPA_ALLDATA_kMeans_5.png'),width = 6, height = 4, units = 'in', res = 300)
+fviz_cluster(Dcluster5, data = detailPA, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm", 
+             ggtheme = theme_minimal(), main = FALSE)
+dev.off()
+png(file = paste('detailPA_ALLDATA_kMeans_6.png'),width = 6, height = 4, units = 'in', res = 300)
+fviz_cluster(Dcluster6, data = detailPA, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm", 
+             ggtheme = theme_minimal(), main = FALSE)
+dev.off()
+png(file = paste('detailPA_ALLDATA_kMeans_12.png'),width = 6, height = 4, units = 'in', res = 300)
+fviz_cluster(Dcluster12, data = detailPA, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm", 
+             ggtheme = theme_minimal(), main = FALSE)
+dev.off()
+
+
+
+#----Create Env summary tables-----
+sumDepthB5 <- summaryBy(Bottom_Depth ~ broadPA5, data=env, FUN=c(range, mean))  # summarise depth by cluster giving min, max and mean.Replace variables with your exact column names
+colnames(sumDepthB5) <- c("Cluster","Min Depth","Max Depth","Mean Depth")
+sumDepthB5$ClustType <- rep("B5",nrow(sumDepthB5))
+sumDepthB11 <- summaryBy(Bottom_Depth ~ broadPA11, data=env, FUN=c(range, mean))
+colnames(sumDepthB11) <- c("Cluster","Min Depth","Max Depth","Mean Depth")
+sumDepthB11$ClustType <- rep("B11",nrow(sumDepthB11))
+sumDepthB17 <- summaryBy(Bottom_Depth ~ broadPA17, data=env, FUN=c(range, mean))
+colnames(sumDepthB17) <- c("Cluster","Min Depth","Max Depth","Mean Depth")
+sumDepthB17$ClustType <- rep("B17",nrow(sumDepthB17))
+sumDepthD5 <- summaryBy(Bottom_Depth ~ detailPA5, data=env, FUN=c(range, mean))
+colnames(sumDepthD5) <- c("Cluster","Min Depth","Max Depth","Mean Depth")
+sumDepthD5$ClustType <- rep("D5",nrow(sumDepthD5))
+sumDepthD6 <- summaryBy(Bottom_Depth ~ detailPA6, data=env, FUN=c(range, mean))
+colnames(sumDepthD6) <- c("Cluster","Min Depth","Max Depth","Mean Depth")
+sumDepthD6$ClustType <- rep("D6",nrow(sumDepthD6))
+sumDepthD12 <- summaryBy(Bottom_Depth ~ detailPA12, data=env, FUN=c(range, mean))
+colnames(sumDepthD12) <- c("Cluster","Min Depth","Max Depth","Mean Depth")
+sumDepthD12$ClustType <- rep("D12",nrow(sumDepthD12))
+
+sumDepth <- rbind(sumDepthB5, sumDepthB11, sumDepthB17, sumDepthD5, sumDepthD6, sumDepthD12)
+setwd("C:/OneDrive/C2_Coms/Cluster_Summaries")
+write.csv(sumDepth, file = "4_ALLDATA_PA_kMeanCluster_Depth_Summary.csv", row.names=FALSE)
+
+
+
+
+######################################
+#### PRINCIPAL COMPONENT ANALYSIS ####
+######################################
+
+pca <- rda(broadPA, scale = T)
+summary(pca, display = NULL) # 30% of variation explained by first 2 PC's
+scores(pca, choices = 1:2, display = "species", scaling = 0) # shows how each species is affected by PC1 and PC2
+plot(pca)
+
+pca2 <- rda(detailPA, scale = T)
+summary(pca2, display = NULL) # 30% of variation explained by first 2 PC's
+scores(pca2, choices = 1:2, display = "species", scaling = 0) # shows how each species is affected by PC1 and PC2
+plot(pca)
+
+```
+
+```{r NO SUBSTRATE DATA}
+
+setwd("C:/OneDrive/C2_Coms")
+
+# Add in combined data
+
+detailNS <- read.csv("16_Detail_SubstrateRemoved_Matrix.csv", header = TRUE, row.names = 1)
+broadNS <- read.csv("17_Broad_SubstrateRemoved_Matrix.csv", header = TRUE, row.names = 1)
+
+# REMOVE ROWS THAT SUM TO ZERO
+detailNS <- detailNS[ rowSums(detailNS)!=0, ] 
+write.csv(detailNS, "18_Detail_NOSubstrateZeros_Matrix.csv")
+broadNS <- broadNS[ rowSums(broadNS)!=0, ] 
+write.csv(broadNS, "19_Broad_NOSubstrateZeros_Matrix.csv")
+
+# Transform data
+detailNS <- sqrt(detailNS)
+broadNS <- sqrt(broadNS)
+
+# set seed as can change between runs
+set.seed(3)
+
+
+
+################################
+#### HIERACHICAL CLUSTERING ####
+################################
+
+#################
+## DENDROGRAMS ##
+#################
+
+dist.res <- vegdist(broadNS, method = "bray") # Disimilarit matrix
+hc <- hclust(dist.res, method = "complete") # Hierarchical clustering results
+par(mfrow = c(1,1)) # Visualization of hclust
+plot(hc, labels = FALSE, hang = -1)
+rect.hclust(hc, k = 6, border = 2:7) # Add rectangle around 6 groups
+hc.cut <- cutree(hc, k = 6) # Cut into 6 groups
+head(hc.cut, 20)
+
+# Repeat for detailNS matrix
+dist.res2 <- vegdist(detailNS, method = "bray")
+hc2 <- hclust(dist.res2, method = "complete")
+par(mfrow = c(1,1))
+plot(hc2, labels = FALSE, hang = -1)
+rect.hclust(hc2, k = 6, border = 2:13) 
+hc.cut2 <- cutree(hc2, k = 6)
+head(hc.cut2, 20)
+
+
+###############
+## MDS PLOTS ##
+###############
+
+MDS_NS <- metaMDS(broadNS, distance="bray", k=2, autotransform = TRUE, trace = FALSE, trymax = 100)
+plot(MDS_NS)
+summary(MDS_NS)
+
+MDS_NS2 <- metaMDS(detailNS, distance="bray", k=2, autotransform = TRUE, trace = FALSE, trymax = 100)
+plot(MDS_NS2)
+summary(MDS_NS2)
+
+# Save points
+MDS_NSpoints <- MDS_NS$points
+MDS_NS2points <- MDS_NS2$points
+setwd("C:/OneDrive/C2_Coms/MDS_Points")
+write.csv(MDSpoints, "5_broad_NOSUBSTRATE_MDSpoints.csv")
+write.csv(MDS2points, "6_detail_NOSUBSTRATE_MDSpoints.csv")
+
+
+# Stressplot
+stressplot(MDS_NS)
+gof <- goodness(MDS_NS)
+plot(MDS_NS, type = "t", main = "goodness of fit")
+points(MDS_NS, display = "sites", cex = gof*100)
+
+# Fit environmental variables to MDS
+fit <- envfit(MDS_NS ~ BottomDepth, data = clust, scale = T)
+fit
+plot(MDS_NS$points, type='n') # plot without anything in it
+points(MDS_NS, col=cols[depths10], pch = shps[areas])
+legend('topright', col=cols, legend = levels(depths10), pch = 16, cex = 1)
+legend('bottomright', legend = levels(areas), pch = shps, cex = 1)
+plot(fit, p.max = 0.05, cex = 1.25, col = "red")
+
+
+
+#####################################
+#### NON HIERARCHICAL CLUSTERING ####
+#####################################
+
+# https://www.r-bloggers.com/finding-optimal-number-of-clusters/
+# http://www.sthda.com/english/wiki/determining-the-optimal-number-of-clusters-3-must-known-methods-unsupervised-machine-learning
+
+#######################################
+## DETERMINE OPTIMAL CLUSTER NUMBERS ##
+#######################################
+
+setwd("C:/OneDrive/C2_Coms/R_Figures")
+par(mfrow=c(1,1))
+
+## ELBOW METHOD ##
+wss <- (nrow(broadNS)-1)*sum(apply(broadNS,2,var))
+  for (i in 1:20) wss[i] <- sum(kmeans(broadNS, centers=i)$withinss)
+plot(1:20, wss, type="b",
+     pch = 19, frame = FALSE,
+     xlab="Number of Clusters",
+     ylab="Within groups sum of squares")
+
+wss2 <- (nrow(detailNS)-1)*sum(apply(detailNS,2,var))
+  for (i in 1:20) wss2[i] <- sum(kmeans(detailNS, centers=i)$withinss)
+plot(1:20, wss2, type="b",
+     pch = 19, frame = FALSE,
+     xlab="Number of Clusters",
+     ylab="Within groups sum of squares")
+
+
+png(file = paste('broad_NOSUBSTRATE_Elbow.png'),width = 4, height = 4, units = 'in', res = 300)
+plot(1:20, wss, type="b", pch = 19, frame = FALSE, xlab="Number of Clusters", ylab="Within groups sum of squares")
+dev.off()
+png(file = paste('detail_NOSUBSTRATE_Elbow.png'),width = 4, height = 4, units = 'in', res = 300)
+plot(1:20, wss2, type="b", pch = 19, frame = FALSE, xlab="Number of Clusters", ylab="Within groups sum of squares")
+dev.off()
+
+
+## BIC ##
+d_clust <- Mclust(broadNS, G=1:20,modelNames = mclust.options("emModelNames"))
+d_clust$BIC
+# broadNS: 15, 16 and 14 are best
+
+d_clust2 <- Mclust(detailNS, G=1:20, modelNames = mclust.options("emModelNames"))
+d_clust2$BIC
+# detailNS: 17, 16, and 15 are best
+
+
+
+
+## GAP STATISTIC ##
+gap_stat <- clusGap(broadNS, FUN = kmeans, nstart = 25, K.max = 20, B = 500)
+print(gap_stat, method = "firstmax")
+plot(gap_stat, frame = FALSE, xlab = "Number of clusters k")
+fviz_gap_stat(gap_stat)
+# broadNS: 14 clusters appears best
+
+gap_stat2 <- clusGap(detailNS, FUN = kmeans, nstart = 25, K.max = 20, B = 500)
+print(gap_stat2, method = "firstmax")
+plot(gap_stat2, frame = FALSE, xlab = "Number of clusters k")
+fviz_gap_stat(gap_stat2)
+# detailNS: 12 clusters appears best
+
+png(file = paste('broad_NOSUBSTRATE_GAPstat.png'),width = 8, height = 4, units = 'in', res = 300)
+fviz_gap_stat(gap_stat)
+dev.off()
+png(file = paste('detail_NOSUBSTRATE_GAPstat.png'),width = 8, height = 4, units = 'in', res = 300)
+fviz_gap_stat(gap_stat2)
+dev.off()
+
+
+
+## NB CLUST ##
+nb <- NbClust(broadNS, diss=NULL, distance = "euclidean", min.nc=5, max.nc=20, method = "kmeans",
+              index = "all", alphaBeale = 0.1)
+hist(nb$Best.nc[1,], breaks = max(na.omit(nb$Best.nc[1,])))
+fviz_nbclust(nb) + theme_minimal()
+# All gap statistic values
+nb$All.index
+# Best number of clusters
+nb$Best.nc
+# Best partition
+nb$Best.partition
+par(mfrow=c(1,1))
+# broadNS: 5 clusters most common (9 times) then 6 (5 times)
+
+nb2 <- NbClust(detailNS, diss=NULL, distance = "euclidean", 
+              min.nc=5, max.nc=20, method = "kmeans", 
+              index = "all", alphaBeale = 0.1)
+hist(nb2$Best.nc[1,], breaks = max(na.omit(nb2$Best.nc[1,])))
+fviz_nbclust(nb2) + theme_minimal()
+# detailNS: 5 clusters most common (11 times) then 13 (4 times)
+
+png(file = paste('broad_NOSUBSTRATE_NBclust.png'),width = 8, height = 4, units = 'in', res = 300)
+fviz_nbclust(nb) + theme_minimal()
+dev.off()
+png(file = paste('detail_NOSUBSTRATE_NBclust.png'),width = 8, height = 4, units = 'in', res = 300)
+fviz_nbclust(nb2) + theme_minimal()
+dev.off()
+
+
+############################
+#### K-MEANS CLUSTERING ####
+###########################
+
+# Put in values for the best cluster numbers
+
+Bcluster5 <- kmeans(broadNS, 5, nstart = 100)
+table(Bcluster5$clust)
+Bcluster5$tot.withinss
+
+Bcluster6 <- kmeans(broadNS, 6, nstart = 100)
+table(Bcluster6$clust)
+Bcluster6$tot.withinss
+
+Bcluster14 <- kmeans(broadNS, 14, nstart = 100)
+table(Bcluster14$clust)
+Bcluster14$tot.withinss
+
+Dcluster5 <- kmeans(detailNS, 5, nstart = 100)
+table(Dcluster5$clust)
+Dcluster5$tot.withinss
+
+Dcluster12 <- kmeans(detailNS, 12, nstart = 100)
+table(Dcluster12$clust)
+Dcluster12$tot.withinss
+
+Dcluster13 <- kmeans(detailNS, 13, nstart = 100)
+table(Dcluster13$clust)
+Dcluster13$tot.withinss
+
+
+# Visualize k-means clusters
+fviz_cluster(Bcluster5, data = broadNS, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm", 
+             ggtheme = theme_minimal(), main = FALSE)
+fviz_cluster(Bcluster6, data = broadNS, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm",
+             ggtheme = theme_minimal(), main = FALSE)
+fviz_cluster(Bcluster14, data = broadNS, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm",
+             ggtheme = theme_minimal(), main = FALSE)
+fviz_cluster(Dcluster5, data = detailNS, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm",
+             ggtheme = theme_minimal(), main = FALSE)
+fviz_cluster(Dcluster12, data = detailNS, geom = "point",pointsize = 2, stand = FALSE, ellipse.type = "norm",
+             ggtheme = theme_minimal(), main = FALSE)
+fviz_cluster(Dcluster13, data = detailNS, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm", 
+             ggtheme = theme_minimal(), main = FALSE)
+
+
+
+# Export results to data frame
+kClusters <- data.frame(Bcluster5$cluster)
+colnames(kClusters)[1] <- "broadNS5"
+kClusters$broadNS6 <- Bcluster6$cluster
+kClusters$broadNS14 <- Bcluster14$cluster
+kClusters$detailNS5 <- Dcluster5$cluster
+kClusters$detailNS12 <- Dcluster12$cluster
+kClusters$detailNS13 <- Dcluster13$cluster
+setwd("C:/OneDrive/C2_Coms/Cluster_Summaries")
+write.csv(kClusters, "5_NOSUBSTRATE_kMeans_Cluster_Numbers.csv")
+
+
+# Export plots
+setwd("C:/OneDrive/C2_Coms/R_Figures")
+png(file = paste('broad_NOSUBSTRATE_kMeans_5.png'),width = 6, height = 4, units = 'in', res = 300)
+fviz_cluster(Bcluster5, data = broadNS, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm", 
+             ggtheme = theme_minimal(), main = FALSE)
+dev.off()
+png(file = paste('broad_NOSUBSTRATE_kMeans_6.png'),width = 6, height = 4, units = 'in', res = 300)
+fviz_cluster(Bcluster6, data = broadNS, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm", 
+             ggtheme = theme_minimal(), main = FALSE)
+dev.off()
+png(file = paste('broad_NOSUBSTRATE_kMeans_14.png'),width = 6, height = 4, units = 'in', res = 300)
+fviz_cluster(Bcluster14, data = broadNS, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm", 
+             ggtheme = theme_minimal(), main = FALSE)
+dev.off()
+png(file = paste('detail_NOSUBSTRATE_kMeans_5.png'),width = 6, height = 4, units = 'in', res = 300)
+fviz_cluster(Dcluster5, data = detailNS, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm", 
+             ggtheme = theme_minimal(), main = FALSE)
+dev.off()
+png(file = paste('detail_NOSUBSTRATE_kMeans_12.png'),width = 6, height = 4, units = 'in', res = 300)
+fviz_cluster(Dcluster12, data = detailNS, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm", 
+             ggtheme = theme_minimal(), main = FALSE)
+dev.off()
+png(file = paste('detail_NOSUBSTRATE_kMeans_13.png'),width = 6, height = 4, units = 'in', res = 300)
+fviz_cluster(Dcluster13, data = detailNS, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm", 
+             ggtheme = theme_minimal(), main = FALSE)
+dev.off()
+
+
+
+setwd("C:/OneDrive/C2_Coms")
+env2 <- read.csv("26_NS_AllDataCombined_ForFigures.csv", header = T, row.names = 1)
+  
+#----Create Env summary tables-----
+sumDepthB5 <- summaryBy(Bottom_Depth ~ broadNS5, data=env2, FUN=c(range, mean))  # summarise depth by cluster giving min, max and mean.Replace variables with your exact column names
+colnames(sumDepthB5) <- c("Cluster","Min Depth","Max Depth","Mean Depth")
+sumDepthB5$ClustType <- rep("B5",nrow(sumDepthB5))
+sumDepthB6 <- summaryBy(Bottom_Depth ~ broadNS6, data=env2, FUN=c(range, mean))
+colnames(sumDepthB6) <- c("Cluster","Min Depth","Max Depth","Mean Depth")
+sumDepthB6$ClustType <- rep("B6",nrow(sumDepthB6))
+sumDepthB14 <- summaryBy(Bottom_Depth ~ broadNS14, data=env2, FUN=c(range, mean))
+colnames(sumDepthB14) <- c("Cluster","Min Depth","Max Depth","Mean Depth")
+sumDepthB14$ClustType <- rep("B14",nrow(sumDepthB14))
+sumDepthD5 <- summaryBy(Bottom_Depth ~ detailNS5, data=env2, FUN=c(range, mean))
+colnames(sumDepthD5) <- c("Cluster","Min Depth","Max Depth","Mean Depth")
+sumDepthD5$ClustType <- rep("D5",nrow(sumDepthD5))
+sumDepthD13 <- summaryBy(Bottom_Depth ~ detailNS13, data=env2, FUN=c(range, mean))
+colnames(sumDepthD13) <- c("Cluster","Min Depth","Max Depth","Mean Depth")
+sumDepthD13$ClustType <- rep("D13",nrow(sumDepthD13))
+sumDepthD12 <- summaryBy(Bottom_Depth ~ detailNS12, data=env2, FUN=c(range, mean))
+colnames(sumDepthD12) <- c("Cluster","Min Depth","Max Depth","Mean Depth")
+sumDepthD12$ClustType <- rep("D12",nrow(sumDepthD12))
+
+sumDepth <- rbind(sumDepthB5, sumDepthB6, sumDepthB14, sumDepthD5, sumDepthD12, sumDepthD13)
+setwd("C:/OneDrive/C2_Coms/Cluster_Summaries")
+write.csv(sumDepth, file = "6_NOSUBSTRATE_kMeanCluster_Depth_Summary.csv", row.names=FALSE)
+
+
+
+######################################
+#### PRINCIPAL COMPONENT ANALYSIS ####
+######################################
+
+pca <- rda(broadNS, scale = T)
+summary(pca, display = NULL) # 30% of variation explained by first 2 PC's
+scores(pca, choices = 1:2, display = "species", scaling = 0) # shows how each species is affected by PC1 and PC2
+plot(pca)
+
+pca2 <- rda(detailNS, scale = T)
+summary(pca2, display = NULL) # 30% of variation explained by first 2 PC's
+scores(pca2, choices = 1:2, display = "species", scaling = 0) # shows how each species is affected by PC1 and PC2
+plot(pca)
+
+```
+
+```{r NO SUBSTRATE DATA PA}
+
+# Transform data PA
+detailNSPA <- detailNS
+detailNSPA[detailNSPA > 0] <- 1
+broadNSPA <- broadNS
+broadNSPA[broadNSPA > 0] <- 1
+
+# set seed as can change between runs
+set.seed(3)
+
+
+################################
+#### HIERACHICAL CLUSTERING ####
+################################
+
+#################
+## DENDROGRAMS ##
+#################
+
+dist.res <- vegdist(broadNSPA, method = "bray") # Disimilarit matrix
+hc <- hclust(dist.res, method = "complete") # Hierarchical clustering results
+par(mfrow = c(1,1)) # Visualization of hclust
+plot(hc, labels = FALSE, hang = -1)
+rect.hclust(hc, k = 6, border = 2:7) # Add rectangle around 6 groups
+hc.cut <- cutree(hc, k = 6) # Cut into 6 groups
+head(hc.cut, 20)
+
+# Repeat for detailNSPA matrix
+dist.res2 <- vegdist(detailNSPA, method = "bray")
+hc2 <- hclust(dist.res2, method = "complete")
+par(mfrow = c(1,1))
+plot(hc2, labels = FALSE, hang = -1)
+rect.hclust(hc2, k = 6, border = 2:13) 
+hc.cut2 <- cutree(hc2, k = 6)
+head(hc.cut2, 20)
+
+
+###############
+## MDS PLOTS ##
+###############
+
+MDS_NS_PA <- metaMDS(broadNSPA, distance="bray", k=2, autotransform = TRUE, trace = FALSE, trymax = 100)
+plot(MDS_NS_PA)
+summary(MDS_NS_PA)
+
+MDS_NS_PA2 <- metaMDS(detailNSPA, distance="bray", k=2, autotransform = TRUE, trace = FALSE, trymax = 100)
+plot(MDS_NS_PA2)
+summary(MDS_NS_PA2)
+
+# Save points
+MDS_NS_PApoints <- MDS_NS_PA$points
+MDS_NS_PA2points <- MDS_NS_PA2$points
+setwd("C:/OneDrive/C2_Coms/MDS_Points")
+write.csv(MDS_NS_PApoints, "7_broadPA_NOSUBSTRATE_MDSpoints.csv")
+write.csv(MDS_NS_PA2points, "8_detailPA_NOSUBSTRATE_MDSpoints.csv")
+
+
+
+#####################################
+#### NON HIERARCHICAL CLUSTERING ####
+#####################################
+
+# https://www.r-bloggers.com/finding-optimal-number-of-clusters/
+# http://www.sthda.com/english/wiki/determining-the-optimal-number-of-clusters-3-must-known-methods-unsupervised-machine-learning
+
+#######################################
+## DETERMINE OPTIMAL CLUSTER NUMBERS ##
+#######################################
+
+setwd("C:/OneDrive/C2_Coms/R_Figures")
+par(mfrow=c(1,1))
+
+## ELBOW METHOD ##
+wss <- (nrow(broadNSPA)-1)*sum(apply(broadNSPA,2,var))
+  for (i in 1:20) wss[i] <- sum(kmeans(broadNSPA, centers=i)$withinss)
+plot(1:20, wss, type="b",
+     pch = 19, frame = FALSE,
+     xlab="Number of Clusters",
+     ylab="Within groups sum of squares")
+
+wss2 <- (nrow(detailNSPA)-1)*sum(apply(detailNSPA,2,var))
+  for (i in 1:20) wss2[i] <- sum(kmeans(detailNSPA, centers=i)$withinss)
+plot(1:20, wss2, type="b",
+     pch = 19, frame = FALSE,
+     xlab="Number of Clusters",
+     ylab="Within groups sum of squares")
+
+
+png(file = paste('broadPA_NOSUBSTRATE_Elbow.png'),width = 4, height = 4, units = 'in', res = 300)
+plot(1:20, wss, type="b", pch = 19, frame = FALSE, xlab="Number of Clusters", ylab="Within groups sum of squares")
+dev.off()
+png(file = paste('detailPA_NOSUBSTRATE_Elbow.png'),width = 4, height = 4, units = 'in', res = 300)
+plot(1:20, wss2, type="b", pch = 19, frame = FALSE, xlab="Number of Clusters", ylab="Within groups sum of squares")
+dev.off()
+
+
+## BIC ##
+d_clust <- Mclust(broadNSPA, G=1:20,modelNames = mclust.options("emModelNames"))
+d_clust$BIC
+# broadNSPA: 20, 19 and 18 are best
+
+d_clust2 <- Mclust(detailNSPA, G=1:20, modelNames = mclust.options("emModelNames"))
+d_clust2$BIC
+# detailNSPA: EEI.1, and EVI.1 and VEI.1 are best
+
+
+
+
+## GAP STATISTIC ##
+gap_stat <- clusGap(broadNSPA, FUN = kmeans, nstart = 25, K.max = 20, B = 500)
+print(gap_stat, method = "firstmax")
+plot(gap_stat, frame = FALSE, xlab = "Number of clusters k")
+fviz_gap_stat(gap_stat)
+# broadNSPA: 5 clusters appears best
+
+gap_stat2 <- clusGap(detailNSPA, FUN = kmeans, nstart = 25, K.max = 20, B = 500)
+print(gap_stat2, method = "firstmax")
+plot(gap_stat2, frame = FALSE, xlab = "Number of clusters k")
+fviz_gap_stat(gap_stat2)
+# detailNSPA: 10 clusters appears best
+
+png(file = paste('broadPA_NOSUBSTRATE_GAPstat.png'),width = 8, height = 4, units = 'in', res = 300)
+fviz_gap_stat(gap_stat)
+dev.off()
+png(file = paste('detailPA_NOSUBSTRATE_GAPstat.png'),width = 8, height = 4, units = 'in', res = 300)
+fviz_gap_stat(gap_stat2)
+dev.off()
+
+
+
+## NB CLUST ##
+nb <- NbClust(broadNSPA, diss=NULL, distance = "euclidean", min.nc=5, max.nc=20, method = "kmeans",
+              index = "all", alphaBeale = 0.1)
+hist(nb$Best.nc[1,], breaks = max(na.omit(nb$Best.nc[1,])))
+fviz_nbclust(nb) + theme_minimal()
+# All gap statistic values
+nb$All.index
+# Best number of clusters
+nb$Best.nc
+# Best partition
+nb$Best.partition
+par(mfrow=c(1,1))
+# broadNSPA: 19 clusters most common (7 times) then 6 (4 times)
+
+nb2 <- NbClust(detailNSPA, diss=NULL, distance = "euclidean", 
+              min.nc=5, max.nc=20, method = "kmeans", 
+              index = "all", alphaBeale = 0.1)
+hist(nb2$Best.nc[1,], breaks = max(na.omit(nb2$Best.nc[1,])))
+fviz_nbclust(nb2) + theme_minimal()
+# detailNSPA: 5 clusters most common (11 times) then 13 (4 times)
+
+png(file = paste('broadPA_NOSUBSTRATE_NBclust.png'),width = 8, height = 4, units = 'in', res = 300)
+fviz_nbclust(nb) + theme_minimal()
+dev.off()
+png(file = paste('detailPA_NOSUBSTRATE_NBclust.png'),width = 8, height = 4, units = 'in', res = 300)
+fviz_nbclust(nb2) + theme_minimal()
+dev.off()
+
+
+############################
+#### K-MEANS CLUSTERING ####
+###########################
+
+# Put in values for the best cluster numbers
+
+Bcluster5 <- kmeans(broadNSPA, 5, nstart = 100)
+table(Bcluster5$clust)
+Bcluster5$tot.withinss
+
+Bcluster6 <- kmeans(broadNSPA, 6, nstart = 100)
+table(Bcluster6$clust)
+Bcluster6$tot.withinss
+
+Bcluster19 <- kmeans(broadNSPA, 19, nstart = 100)
+table(Bcluster19$clust)
+Bcluster19$tot.withinss
+
+Dcluster5 <- kmeans(detailNSPA, 5, nstart = 100)
+table(Dcluster5$clust)
+Dcluster5$tot.withinss
+
+Dcluster10 <- kmeans(detailNSPA, 10, nstart = 100)
+table(Dcluster10$clust)
+Dcluster10$tot.withinss
+
+Dcluster13 <- kmeans(detailNSPA, 13, nstart = 100)
+table(Dcluster13$clust)
+Dcluster13$tot.withinss
+
+
+# Visualize k-means clusters
+fviz_cluster(Bcluster5, data = broadNSPA, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm", 
+             ggtheme = theme_minimal(), main = FALSE)
+fviz_cluster(Bcluster6, data = broadNSPA, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm",
+             ggtheme = theme_minimal(), main = FALSE)
+fviz_cluster(Bcluster19, data = broadNSPA, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm",
+             ggtheme = theme_minimal(), main = FALSE)
+fviz_cluster(Dcluster5, data = detailNSPA, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm",
+             ggtheme = theme_minimal(), main = FALSE)
+fviz_cluster(Dcluster10, data = detailNSPA, geom = "point",pointsize = 2, stand = FALSE, ellipse.type = "norm",
+             ggtheme = theme_minimal(), main = FALSE)
+fviz_cluster(Dcluster13, data = detailNSPA, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm", 
+             ggtheme = theme_minimal(), main = FALSE)
+
+
+
+# Export results to data frame
+kClusters <- data.frame(Bcluster5$cluster)
+colnames(kClusters)[1] <- "broadNSPA5"
+kClusters$broadNSPA6 <- Bcluster6$cluster
+kClusters$broadNSPA19 <- Bcluster19$cluster
+kClusters$detailNSPA5 <- Dcluster5$cluster
+kClusters$detailNSPA10 <- Dcluster10$cluster
+kClusters$detailNSPA13 <- Dcluster13$cluster
+setwd("C:/OneDrive/C2_Coms/Cluster_Summaries")
+write.csv(kClusters, "7_NOSUBSTRATE_PA_kMeans_Cluster_Numbers.csv")
+
+
+# Export plots
+setwd("C:/OneDrive/C2_Coms/R_Figures")
+png(file = paste('broadPA_NOSUBSTRATE_kMeans_5.png'),width = 6, height = 4, units = 'in', res = 300)
+fviz_cluster(Bcluster5, data = broadNSPA, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm", 
+             ggtheme = theme_minimal(), main = FALSE)
+dev.off()
+png(file = paste('broadPA_NOSUBSTRATE_kMeans_6.png'),width = 6, height = 4, units = 'in', res = 300)
+fviz_cluster(Bcluster6, data = broadNSPA, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm", 
+             ggtheme = theme_minimal(), main = FALSE)
+dev.off()
+png(file = paste('broadPA_NOSUBSTRATE_kMeans_19.png'),width = 6, height = 4, units = 'in', res = 300)
+fviz_cluster(Bcluster19, data = broadNSPA, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm", 
+             ggtheme = theme_minimal(), main = FALSE)
+dev.off()
+png(file = paste('detailPA_NOSUBSTRATE_kMeans_5.png'),width = 6, height = 4, units = 'in', res = 300)
+fviz_cluster(Dcluster5, data = detailNSPA, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm", 
+             ggtheme = theme_minimal(), main = FALSE)
+dev.off()
+png(file = paste('detailPA_NOSUBSTRATE_kMeans_10.png'),width = 6, height = 4, units = 'in', res = 300)
+fviz_cluster(Dcluster10, data = detailNSPA, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm", 
+             ggtheme = theme_minimal(), main = FALSE)
+dev.off()
+png(file = paste('detailPA_NOSUBSTRATE_kMeans_13.png'),width = 6, height = 4, units = 'in', res = 300)
+fviz_cluster(Dcluster13, data = detailNSPA, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm", 
+             ggtheme = theme_minimal(), main = FALSE)
+dev.off()
+
+
+setwd("C:/OneDrive/C2_Coms")
+env2 <- read.csv("26_NS_AllDataCombined_ForFigures.csv", header = T, row.names = 1)
+#----Create Env summary tables-----
+sumDepthB5 <- summaryBy(Bottom_Depth ~ broadNSPA5, data=env2, FUN=c(range, mean))  # summarise depth by cluster giving min, max and mean.Replace variables with your exact column names
+colnames(sumDepthB5) <- c("Cluster","Min Depth","Max Depth","Mean Depth")
+sumDepthB5$ClustType <- rep("B5",nrow(sumDepthB5))
+sumDepthB6 <- summaryBy(Bottom_Depth ~ broadNSPA6, data=env2, FUN=c(range, mean))
+colnames(sumDepthB6) <- c("Cluster","Min Depth","Max Depth","Mean Depth")
+sumDepthB6$ClustType <- rep("B6",nrow(sumDepthB6))
+sumDepthB19 <- summaryBy(Bottom_Depth ~ broadNSPA19, data=env2, FUN=c(range, mean))
+colnames(sumDepthB19) <- c("Cluster","Min Depth","Max Depth","Mean Depth")
+sumDepthB19$ClustType <- rep("B19",nrow(sumDepthB19))
+sumDepthD5 <- summaryBy(Bottom_Depth ~ detailNSPA5, data=env2, FUN=c(range, mean))
+colnames(sumDepthD5) <- c("Cluster","Min Depth","Max Depth","Mean Depth")
+sumDepthD5$ClustType <- rep("D5",nrow(sumDepthD5))
+sumDepthD10 <- summaryBy(Bottom_Depth ~ detailNSPA10, data=env2, FUN=c(range, mean))
+colnames(sumDepthD10) <- c("Cluster","Min Depth","Max Depth","Mean Depth")
+sumDepthD10$ClustType <- rep("D10",nrow(sumDepthD10))
+sumDepthD13 <- summaryBy(Bottom_Depth ~ detailNSPA13, data=env2, FUN=c(range, mean))
+colnames(sumDepthD13) <- c("Cluster","Min Depth","Max Depth","Mean Depth")
+sumDepthD13$ClustType <- rep("D13",nrow(sumDepthD13))
+
+sumDepth <- rbind(sumDepthB5, sumDepthB6, sumDepthB19, sumDepthD5, sumDepthD10, sumDepthD13)
+setwd("C:/OneDrive/C2_Coms/Cluster_Summaries")
+write.csv(sumDepth, file = "8_NOSUBSTRATE_PA_kMeanCluster_Depth_Summary.csv", row.names=FALSE)
+
+
+
+######################################
+#### PRINCIPAL COMPONENT ANALYSIS ####
+######################################
+
+pca <- rda(broadNSPA, scale = T)
+summary(pca, display = NULL) # 30% of variation explained by first 2 PC's
+scores(pca, choices = 1:2, display = "species", scaling = 0) # shows how each species is affected by PC1 and PC2
+plot(pca)
+
+pca2 <- rda(detailNSPA, scale = T)
+summary(pca2, display = NULL) # 30% of variation explained by first 2 PC's
+scores(pca2, choices = 1:2, display = "species", scaling = 0) # shows how each species is affected by PC1 and PC2
+plot(pca)
+
+```
+
+```{r MERGED CATEGORIES DATA}
+
+setwd("C:/OneDrive/C2_Coms")
+
+# Add in combined data
+
+detailM <- read.csv("20_DETAIL_NOSubstrate_MERGE_matrix.csv", header = TRUE, row.names = 1)
+broadM <- read.csv("21_BROAD_NOSubstrate_MERGE_matrix.csv", header = TRUE, row.names = 1)
+
+# Transform data
+detailM <- sqrt(detailM)
+broadM <- sqrt(broadM)
+
+# set seed as can change between runs
+set.seed(3)
+
+
+################################
+#### HIERACHICAL CLUSTERING ####
+################################
+
+#################
+## DENDROGRAMS ##
+#################
+
+dist.res <- vegdist(broadM, method = "bray") # Disimilarit matrix
+hc <- hclust(dist.res, method = "complete") # Hierarchical clustering results
+par(mfrow = c(1,1)) # Visualization of hclust
+plot(hc, labels = FALSE, hang = -1)
+rect.hclust(hc, k = 6, border = 2:7) # Add rectangle around 6 groups
+hc.cut <- cutree(hc, k = 6) # Cut into 6 groups
+head(hc.cut, 20)
+
+# Repeat for detailM matrix
+dist.res2 <- vegdist(detailM, method = "bray")
+hc2 <- hclust(dist.res2, method = "complete")
+par(mfrow = c(1,1))
+plot(hc2, labels = FALSE, hang = -1)
+rect.hclust(hc2, k = 6, border = 2:13) 
+hc.cut2 <- cutree(hc2, k = 6)
+head(hc.cut2, 20)
+
+
+###############
+## MDS PLOTS ##
+###############
+
+MDS_M <- metaMDS(broadM, distance="bray", k=2, autotransform = TRUE, trace = FALSE, trymax = 100)
+plot(MDS_M)
+summary(MDS_M)
+
+MDS_M2 <- metaMDS(detailM, distance="bray", k=2, autotransform = TRUE, trace = FALSE, trymax = 100)
+plot(MDS_M2)
+summary(MDS_M2)
+
+# Save points
+MDS_Mpoints <- MDS_M$points
+MDS_M2points <- MDS_M2$points
+setwd("C:/OneDrive/C2_Coms/MDS_Points")
+write.csv(MDSpoints, "9_broad_MERGE_MDSpoints.csv")
+write.csv(MDS2points, "10_detail_MERGE_MDSpoints.csv")
+
+
+# Stressplot
+stressplot(MDS_M)
+gof <- goodness(MDS_M)
+plot(MDS_M, type = "t", main = "goodness of fit")
+points(MDS_M, display = "sites", cex = gof*100)
+
+# Fit environmental variables to MDS
+fit <- envfit(MDS_M ~ BottomDepth, data = clust, scale = T)
+fit
+plot(MDS_M$points, type='n') # plot without anything in it
+points(MDS_M, col=cols[depths10], pch = shps[areas])
+legend('topright', col=cols, legend = levels(depths10), pch = 16, cex = 1)
+legend('bottomright', legend = levels(areas), pch = shps, cex = 1)
+plot(fit, p.max = 0.05, cex = 1.25, col = "red")
+
+
+
+#####################################
+#### NON HIERARCHICAL CLUSTERING ####
+#####################################
+
+# https://www.r-bloggers.com/finding-optimal-number-of-clusters/
+# http://www.sthda.com/english/wiki/determining-the-optimal-number-of-clusters-3-must-known-methods-unsupervised-machine-learning
+
+#######################################
+## DETERMINE OPTIMAL CLUSTER NUMBERS ##
+#######################################
+
+setwd("C:/OneDrive/C2_Coms/R_Figures")
+par(mfrow=c(1,1))
+
+## ELBOW METHOD ##
+wss <- (nrow(broadM)-1)*sum(apply(broadM,2,var))
+  for (i in 1:20) wss[i] <- sum(kmeans(broadM, centers=i)$withinss)
+plot(1:20, wss, type="b",
+     pch = 19, frame = FALSE,
+     xlab="Number of Clusters",
+     ylab="Within groups sum of squares")
+
+wss2 <- (nrow(detailM)-1)*sum(apply(detailM,2,var))
+  for (i in 1:20) wss2[i] <- sum(kmeans(detailM, centers=i)$withinss)
+plot(1:20, wss2, type="b",
+     pch = 19, frame = FALSE,
+     xlab="Number of Clusters",
+     ylab="Within groups sum of squares")
+
+
+png(file = paste('broad_MERGE_Elbow.png'),width = 4, height = 4, units = 'in', res = 300)
+plot(1:20, wss, type="b", pch = 19, frame = FALSE, xlab="Number of Clusters", ylab="Within groups sum of squares")
+dev.off()
+png(file = paste('detail_MERGE_Elbow.png'),width = 4, height = 4, units = 'in', res = 300)
+plot(1:20, wss2, type="b", pch = 19, frame = FALSE, xlab="Number of Clusters", ylab="Within groups sum of squares")
+dev.off()
+
+
+## BIC ##
+d_clust <- Mclust(broadM, G=1:20,modelNames = mclust.options("emModelNames"))
+d_clust$BIC
+# broadM: 5, 4 and 3 are best
+
+d_clust2 <- Mclust(detailM, G=1:20, modelNames = mclust.options("emModelNames"))
+d_clust2$BIC
+# detailM: 12, 11, and 16 are best
+
+
+
+
+## GAP STATISTIC ##
+gap_stat <- clusGap(broadM, FUN = kmeans, nstart = 25, K.max = 20, B = 500)
+print(gap_stat, method = "firstmax")
+plot(gap_stat, frame = FALSE, xlab = "Number of clusters k")
+fviz_gap_stat(gap_stat)
+# broadM: 17 clusters appears best
+
+gap_stat2 <- clusGap(detailM, FUN = kmeans, nstart = 25, K.max = 20, B = 500)
+print(gap_stat2, method = "firstmax")
+plot(gap_stat2, frame = FALSE, xlab = "Number of clusters k")
+fviz_gap_stat(gap_stat2)
+# detailM: 12 clusters appears best
+
+png(file = paste('broad_MERGE_GAPstat.png'),width = 8, height = 4, units = 'in', res = 300)
+fviz_gap_stat(gap_stat)
+dev.off()
+png(file = paste('detail_MERGE_GAPstat.png'),width = 8, height = 4, units = 'in', res = 300)
+fviz_gap_stat(gap_stat2)
+dev.off()
+
+
+
+## NB CLUST ##
+nb <- NbClust(broadM, diss=NULL, distance = "euclidean", min.nc=5, max.nc=20, method = "kmeans",
+              index = "all", alphaBeale = 0.1)
+hist(nb$Best.nc[1,], breaks = max(na.omit(nb$Best.nc[1,])))
+fviz_nbclust(nb) + theme_minimal()
+# All gap statistic values
+nb$All.index
+# Best number of clusters
+nb$Best.nc
+# Best partition
+nb$Best.partition
+par(mfrow=c(1,1))
+# broadM: 5 clusters most common (7 times) then 20 (7 times) and 6 (4 times)
+
+nb2 <- NbClust(detailM, diss=NULL, distance = "euclidean", 
+              min.nc=5, max.nc=20, method = "kmeans", 
+              index = "all", alphaBeale = 0.1)
+hist(nb2$Best.nc[1,], breaks = max(na.omit(nb2$Best.nc[1,])))
+fviz_nbclust(nb2) + theme_minimal()
+# detailM: 6 clusters most common (9 times) then 5 (5 times)
+
+png(file = paste('broad_MERGE_NBclust.png'),width = 8, height = 4, units = 'in', res = 300)
+fviz_nbclust(nb) + theme_minimal()
+dev.off()
+png(file = paste('detail_MERGE_NBclust.png'),width = 8, height = 4, units = 'in', res = 300)
+fviz_nbclust(nb2) + theme_minimal()
+dev.off()
+
+
+############################
+#### K-MEANS CLUSTERING ####
+###########################
+
+# Put in values for the best cluster numbers
+
+Bcluster5 <- kmeans(broadM, 5, nstart = 100)
+table(Bcluster5$clust)
+Bcluster5$tot.withinss
+
+Bcluster17 <- kmeans(broadM, 17, nstart = 100)
+table(Bcluster17$clust)
+Bcluster17$tot.withinss
+
+Bcluster20 <- kmeans(broadM, 20, nstart = 100)
+table(Bcluster20$clust)
+Bcluster20$tot.withinss
+
+Dcluster5 <- kmeans(detailM, 5, nstart = 100)
+table(Dcluster5$clust)
+Dcluster5$tot.withinss
+
+Dcluster6 <- kmeans(detailM, 6, nstart = 100)
+table(Dcluster6$clust)
+Dcluster6$tot.withinss
+
+Dcluster12 <- kmeans(detailM, 12, nstart = 100)
+table(Dcluster12$clust)
+Dcluster12$tot.withinss
+
+
+# Visualize k-means clusters
+fviz_cluster(Bcluster5, data = broadM, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm", 
+             ggtheme = theme_minimal(), main = FALSE)
+fviz_cluster(Bcluster17, data = broadM, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm",
+             ggtheme = theme_minimal(), main = FALSE)
+fviz_cluster(Bcluster20, data = broadM, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm",
+             ggtheme = theme_minimal(), main = FALSE)
+fviz_cluster(Dcluster5, data = detailM, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm",
+             ggtheme = theme_minimal(), main = FALSE)
+fviz_cluster(Dcluster6, data = detailM, geom = "point",pointsize = 2, stand = FALSE, ellipse.type = "norm",
+             ggtheme = theme_minimal(), main = FALSE)
+fviz_cluster(Dcluster12, data = detailM, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm", 
+             ggtheme = theme_minimal(), main = FALSE)
+
+
+
+# Export results to data frame
+kClusters <- data.frame(Bcluster5$cluster)
+colnames(kClusters)[1] <- "broadM5"
+kClusters$broadM17 <- Bcluster17$cluster
+kClusters$broadM20 <- Bcluster20$cluster
+kClusters$detailM5 <- Dcluster5$cluster
+kClusters$detailM6 <- Dcluster6$cluster
+kClusters$detailM12 <- Dcluster12$cluster
+setwd("C:/OneDrive/C2_Coms/Cluster_Summaries")
+write.csv(kClusters, "9_MERGE_kMeans_Cluster_Numbers.csv")
+
+
+# Export plots
+setwd("C:/OneDrive/C2_Coms/R_Figures")
+png(file = paste('broad_MERGE_kMeans_5.png'),width = 6, height = 4, units = 'in', res = 300)
+fviz_cluster(Bcluster5, data = broadM, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm", 
+             ggtheme = theme_minimal(), main = FALSE)
+dev.off()
+png(file = paste('broad_MERGE_kMeans_17.png'),width = 6, height = 4, units = 'in', res = 300)
+fviz_cluster(Bcluster17, data = broadM, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm", 
+             ggtheme = theme_minimal(), main = FALSE)
+dev.off()
+png(file = paste('broad_MERGE_kMeans_20.png'),width = 6, height = 4, units = 'in', res = 300)
+fviz_cluster(Bcluster20, data = broadM, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm", 
+             ggtheme = theme_minimal(), main = FALSE)
+dev.off()
+png(file = paste('detail_MERGE_kMeans_5.png'),width = 6, height = 4, units = 'in', res = 300)
+fviz_cluster(Dcluster5, data = detailM, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm", 
+             ggtheme = theme_minimal(), main = FALSE)
+dev.off()
+png(file = paste('detail_MERGE_kMeans_6.png'),width = 6, height = 4, units = 'in', res = 300)
+fviz_cluster(Dcluster6, data = detailM, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm", 
+             ggtheme = theme_minimal(), main = FALSE)
+dev.off()
+png(file = paste('detail_MERGE_kMeans_12.png'),width = 6, height = 4, units = 'in', res = 300)
+fviz_cluster(Dcluster12, data = detailM, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm", 
+             ggtheme = theme_minimal(), main = FALSE)
+dev.off()
+
+
+
+setwd("C:/OneDrive/C2_Coms")
+env2 <- read.csv("26_NS_AllDataCombined_ForFigures.csv", header = T, row.names = 1)
+#----Create Env summary tables-----
+sumDepthB5 <- summaryBy(Bottom_Depth ~ broadM5, data=env2, FUN=c(range, mean))  # summarise depth by cluster giving min, max and mean.Replace variables with your exact column names
+colnames(sumDepthB5) <- c("Cluster","Min Depth","Max Depth","Mean Depth")
+sumDepthB5$ClustType <- rep("B5",nrow(sumDepthB5))
+sumDepthB17 <- summaryBy(Bottom_Depth ~ broadM17, data=env2, FUN=c(range, mean))
+colnames(sumDepthB17) <- c("Cluster","Min Depth","Max Depth","Mean Depth")
+sumDepthB17$ClustType <- rep("B17",nrow(sumDepthB17))
+sumDepthB20 <- summaryBy(Bottom_Depth ~ broadM20, data=env2, FUN=c(range, mean))
+colnames(sumDepthB20) <- c("Cluster","Min Depth","Max Depth","Mean Depth")
+sumDepthB20$ClustType <- rep("B20",nrow(sumDepthB20))
+sumDepthD6 <- summaryBy(Bottom_Depth ~ detailM6, data=env2, FUN=c(range, mean))
+colnames(sumDepthD6) <- c("Cluster","Min Depth","Max Depth","Mean Depth")
+sumDepthD6$ClustType <- rep("D6",nrow(sumDepthD6))
+sumDepthD5 <- summaryBy(Bottom_Depth ~ detailM5, data=env2, FUN=c(range, mean))
+colnames(sumDepthD5) <- c("Cluster","Min Depth","Max Depth","Mean Depth")
+sumDepthD5$ClustType <- rep("D5",nrow(sumDepthD5))
+sumDepthD12 <- summaryBy(Bottom_Depth ~ detailM12, data=env2, FUN=c(range, mean))
+colnames(sumDepthD12) <- c("Cluster","Min Depth","Max Depth","Mean Depth")
+sumDepthD12$ClustType <- rep("D12",nrow(sumDepthD12))
+
+sumDepth <- rbind(sumDepthB5, sumDepthB17, sumDepthB20, sumDepthD5, sumDepthD6, sumDepthD12)
+setwd("C:/OneDrive/C2_Coms/Cluster_Summaries")
+write.csv(sumDepth, file = "10_MERGE_kMeanCluster_Depth_Summary.csv", row.names=FALSE)
+
+
+
+######################################
+#### PRINCIPAL COMPONENT ANALYSIS ####
+######################################
+
+pca <- rda(broadM, scale = T)
+summary(pca, display = NULL) # 30% of variation explained by first 2 PC's
+scores(pca, choices = 1:2, display = "species", scaling = 0) # shows how each species is affected by PC1 and PC2
+plot(pca)
+
+pca2 <- rda(detailM, scale = T)
+summary(pca2, display = NULL) # 30% of variation explained by first 2 PC's
+scores(pca2, choices = 1:2, display = "species", scaling = 0) # shows how each species is affected by PC1 and PC2
+plot(pca)
+
+```
+
+```{r MERGE CATEGORIES DATA PA}
+
+# Transform data PA
+detailMPA <- detailM
+detailMPA[detailMPA > 0] <- 1
+broadMPA <- broadM
+broadMPA[broadMPA > 0] <- 1
+
+# set seed as can change between runs
+set.seed(3)
+
+
+################################
+#### HIERACHICAL CLUSTERING ####
+################################
+
+#################
+## DENDROGRAMS ##
+#################
+
+dist.res <- vegdist(broadMPA, method = "bray") # Disimilarit matrix
+hc <- hclust(dist.res, method = "complete") # Hierarchical clustering results
+par(mfrow = c(1,1)) # Visualization of hclust
+plot(hc, labels = FALSE, hang = -1)
+rect.hclust(hc, k = 6, border = 2:7) # Add rectangle around 6 groups
+hc.cut <- cutree(hc, k = 6) # Cut into 6 groups
+head(hc.cut, 20)
+
+# Repeat for detailMPA matrix
+dist.res2 <- vegdist(detailMPA, method = "bray")
+hc2 <- hclust(dist.res2, method = "complete")
+par(mfrow = c(1,1))
+plot(hc2, labels = FALSE, hang = -1)
+rect.hclust(hc2, k = 6, border = 2:13) 
+hc.cut2 <- cutree(hc2, k = 6)
+head(hc.cut2, 20)
+
+
+###############
+## MDS PLOTS ##
+###############
+
+MDS_M_PA <- metaMDS(broadMPA, distance="bray", k=2, autotransform = TRUE, trace = FALSE, trymax = 100)
+plot(MDS_M_PA)
+summary(MDS_M_PA)
+
+MDS_M_PA2 <- metaMDS(detailMPA, distance="bray", k=2, autotransform = TRUE, trace = FALSE, trymax = 100)
+plot(MDS_M_PA2)
+summary(MDS_M_PA2)
+
+# Save points
+MDS_M_PApoints <- MDS_M_PA$points
+MDS_M_PA2points <- MDS_M_PA2$points
+setwd("C:/OneDrive/C2_Coms/MDS_Points")
+write.csv(MDS_M_PApoints, "11_broadPA_MERGE_MDSpoints.csv")
+write.csv(MDS_M_PA2points, "12_detailPA_MERGE_MDSpoints.csv")
+
+
+
+#####################################
+#### NON HIERARCHICAL CLUSTERING ####
+#####################################
+
+# https://www.r-bloggers.com/finding-optimal-number-of-clusters/
+# http://www.sthda.com/english/wiki/determining-the-optimal-number-of-clusters-3-must-known-methods-unsupervised-machine-learning
+
+#######################################
+## DETERMINE OPTIMAL CLUSTER NUMBERS ##
+#######################################
+
+setwd("C:/OneDrive/C2_Coms/R_Figures")
+par(mfrow=c(1,1))
+
+## ELBOW METHOD ##
+wss <- (nrow(broadMPA)-1)*sum(apply(broadMPA,2,var))
+  for (i in 1:20) wss[i] <- sum(kmeans(broadMPA, centers=i)$withinss)
+plot(1:20, wss, type="b",
+     pch = 19, frame = FALSE,
+     xlab="Number of Clusters",
+     ylab="Within groups sum of squares")
+
+wss2 <- (nrow(detailMPA)-1)*sum(apply(detailMPA,2,var))
+  for (i in 1:20) wss2[i] <- sum(kmeans(detailMPA, centers=i)$withinss)
+plot(1:20, wss2, type="b",
+     pch = 19, frame = FALSE,
+     xlab="Number of Clusters",
+     ylab="Within groups sum of squares")
+
+
+png(file = paste('broadPA_MERGE_Elbow.png'),width = 4, height = 4, units = 'in', res = 300)
+plot(1:20, wss, type="b", pch = 19, frame = FALSE, xlab="Number of Clusters", ylab="Within groups sum of squares")
+dev.off()
+png(file = paste('detailPA_MERGE_Elbow.png'),width = 4, height = 4, units = 'in', res = 300)
+plot(1:20, wss2, type="b", pch = 19, frame = FALSE, xlab="Number of Clusters", ylab="Within groups sum of squares")
+dev.off()
+
+
+## BIC ##
+d_clust <- Mclust(broadMPA, G=1:20,modelNames = mclust.options("emModelNames"))
+d_clust$BIC
+# broadMPA: 20, 19 and 18 are best
+
+d_clust2 <- Mclust(detailMPA, G=1:20, modelNames = mclust.options("emModelNames"))
+d_clust2$BIC
+# detailMPA: 20, 19 and 18 are best
+
+
+
+
+## GAP STATISTIC ##
+gap_stat <- clusGap(broadMPA, FUN = kmeans, nstart = 25, K.max = 20, B = 500)
+print(gap_stat, method = "firstmax")
+plot(gap_stat, frame = FALSE, xlab = "Number of clusters k")
+fviz_gap_stat(gap_stat)
+# broadMPA: 9 clusters appears best
+
+gap_stat2 <- clusGap(detailMPA, FUN = kmeans, nstart = 25, K.max = 20, B = 500)
+print(gap_stat2, method = "firstmax")
+plot(gap_stat2, frame = FALSE, xlab = "Number of clusters k")
+fviz_gap_stat(gap_stat2)
+# detailMPA: 12 clusters appears best
+
+png(file = paste('broadPA_MERGE_GAPstat.png'),width = 8, height = 4, units = 'in', res = 300)
+fviz_gap_stat(gap_stat)
+dev.off()
+png(file = paste('detailPA_MERGE_GAPstat.png'),width = 8, height = 4, units = 'in', res = 300)
+fviz_gap_stat(gap_stat2)
+dev.off()
+
+
+
+## NB CLUST ##
+nb <- NbClust(broadMPA, diss=NULL, distance = "euclidean", min.nc=5, max.nc=20, method = "kmeans",
+              index = "all", alphaBeale = 0.1)
+hist(nb$Best.nc[1,], breaks = max(na.omit(nb$Best.nc[1,])))
+fviz_nbclust(nb) + theme_minimal()
+# All gap statistic values
+nb$All.index
+# Best number of clusters
+nb$Best.nc
+# Best partition
+nb$Best.partition
+par(mfrow=c(1,1))
+# broadMPA: 5 clusters most common (7 times) then 20 (7 times) then 6 (4 times)
+
+nb2 <- NbClust(detailMPA, diss=NULL, distance = "euclidean", 
+              min.nc=5, max.nc=20, method = "kmeans", 
+              index = "all", alphaBeale = 0.1)
+hist(nb2$Best.nc[1,], breaks = max(na.omit(nb2$Best.nc[1,])))
+fviz_nbclust(nb2) + theme_minimal()
+# detailMPA: 5 clusters most common (4 times) then 7 and 18 (3 times)
+
+png(file = paste('broadPA_MERGE_NBclust.png'),width = 8, height = 4, units = 'in', res = 300)
+fviz_nbclust(nb) + theme_minimal()
+dev.off()
+png(file = paste('detailPA_MERGE_NBclust.png'),width = 8, height = 4, units = 'in', res = 300)
+fviz_nbclust(nb2) + theme_minimal()
+dev.off()
+
+
+############################
+#### K-MEANS CLUSTERING ####
+###########################
+
+# Put in values for the best cluster numbers
+
+Bcluster5 <- kmeans(broadMPA, 5, nstart = 100)
+table(Bcluster5$clust)
+Bcluster5$tot.withinss
+
+Bcluster9 <- kmeans(broadMPA, 9, nstart = 100)
+table(Bcluster9$clust)
+Bcluster9$tot.withinss
+
+Bcluster20 <- kmeans(broadMPA, 20, nstart = 100)
+table(Bcluster20$clust)
+Bcluster20$tot.withinss
+
+Dcluster5 <- kmeans(detailMPA, 5, nstart = 100)
+table(Dcluster5$clust)
+Dcluster5$tot.withinss
+
+Dcluster7 <- kmeans(detailMPA, 7, nstart = 100)
+table(Dcluster7$clust)
+Dcluster7$tot.withinss
+
+Dcluster12 <- kmeans(detailMPA, 12, nstart = 100)
+table(Dcluster12$clust)
+Dcluster12$tot.withinss
+
+
+# Visualize k-means clusters
+fviz_cluster(Bcluster5, data = broadMPA, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm", 
+             ggtheme = theme_minimal(), main = FALSE)
+fviz_cluster(Bcluster9, data = broadMPA, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm",
+             ggtheme = theme_minimal(), main = FALSE)
+fviz_cluster(Bcluster20, data = broadMPA, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm",
+             ggtheme = theme_minimal(), main = FALSE)
+fviz_cluster(Dcluster5, data = detailMPA, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm",
+             ggtheme = theme_minimal(), main = FALSE)
+fviz_cluster(Dcluster7, data = detailMPA, geom = "point",pointsize = 2, stand = FALSE, ellipse.type = "norm",
+             ggtheme = theme_minimal(), main = FALSE)
+fviz_cluster(Dcluster12, data = detailMPA, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm", 
+             ggtheme = theme_minimal(), main = FALSE)
+
+
+
+# Export results to data frame
+kClusters <- data.frame(Bcluster5$cluster)
+colnames(kClusters)[1] <- "broadMPA5"
+kClusters$broadMPA9 <- Bcluster9$cluster
+kClusters$broadMPA20 <- Bcluster20$cluster
+kClusters$detailMPA5 <- Dcluster5$cluster
+kClusters$detailMPA7 <- Dcluster7$cluster
+kClusters$detailMPA12 <- Dcluster12$cluster
+setwd("C:/OneDrive/C2_Coms/Cluster_Summaries")
+write.csv(kClusters, "11_MERGE_PA_kMeans_Cluster_Numbers.csv")
+
+
+# Export plots
+setwd("C:/OneDrive/C2_Coms/R_Figures")
+png(file = paste('broadPA_MERGE_kMeans_5.png'),width = 6, height = 4, units = 'in', res = 300)
+fviz_cluster(Bcluster5, data = broadMPA, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm", 
+             ggtheme = theme_minimal(), main = FALSE)
+dev.off()
+png(file = paste('broadPA_MERGE_kMeans_9.png'),width = 6, height = 4, units = 'in', res = 300)
+fviz_cluster(Bcluster9, data = broadMPA, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm", 
+             ggtheme = theme_minimal(), main = FALSE)
+dev.off()
+png(file = paste('broadPA_MERGE_kMeans_20.png'),width = 6, height = 4, units = 'in', res = 300)
+fviz_cluster(Bcluster20, data = broadMPA, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm", 
+             ggtheme = theme_minimal(), main = FALSE)
+dev.off()
+png(file = paste('detailPA_MERGE_kMeans_5.png'),width = 6, height = 4, units = 'in', res = 300)
+fviz_cluster(Dcluster5, data = detailMPA, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm", 
+             ggtheme = theme_minimal(), main = FALSE)
+dev.off()
+png(file = paste('detailPA_MERGE_kMeans_7.png'),width = 6, height = 4, units = 'in', res = 300)
+fviz_cluster(Dcluster7, data = detailMPA, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm", 
+             ggtheme = theme_minimal(), main = FALSE)
+dev.off()
+png(file = paste('detailPA_MERGE_kMeans_12.png'),width = 6, height = 4, units = 'in', res = 300)
+fviz_cluster(Dcluster12, data = detailMPA, geom = "point", pointsize = 2, stand = FALSE, ellipse.type = "norm", 
+             ggtheme = theme_minimal(), main = FALSE)
+dev.off()
+
+
+
+setwd("C:/OneDrive/C2_Coms")
+env2 <- read.csv("26_NS_AllDataCombined_ForFigures.csv", header = T, row.names = 1)
+#----Create Env summary tables-----
+sumDepthB5 <- summaryBy(Bottom_Depth ~ broadMPA5, data=env2, FUN=c(range, mean))  # summarise depth by cluster giving min, max and mean.Replace variables with your exact column names
+colnames(sumDepthB5) <- c("Cluster","Min Depth","Max Depth","Mean Depth")
+sumDepthB5$ClustType <- rep("B5",nrow(sumDepthB5))
+sumDepthB9 <- summaryBy(Bottom_Depth ~ broadMPA9, data=env2, FUN=c(range, mean))
+colnames(sumDepthB9) <- c("Cluster","Min Depth","Max Depth","Mean Depth")
+sumDepthB9$ClustType <- rep("B9",nrow(sumDepthB9))
+sumDepthB20 <- summaryBy(Bottom_Depth ~ broadMPA20, data=env2, FUN=c(range, mean))
+colnames(sumDepthB20) <- c("Cluster","Min Depth","Max Depth","Mean Depth")
+sumDepthB20$ClustType <- rep("B20",nrow(sumDepthB20))
+sumDepthD5 <- summaryBy(Bottom_Depth ~ detailMPA5, data=env2, FUN=c(range, mean))
+colnames(sumDepthD5) <- c("Cluster","Min Depth","Max Depth","Mean Depth")
+sumDepthD5$ClustType <- rep("D5",nrow(sumDepthD5))
+sumDepthD7 <- summaryBy(Bottom_Depth ~ detailMPA7, data=env2, FUN=c(range, mean))
+colnames(sumDepthD7) <- c("Cluster","Min Depth","Max Depth","Mean Depth")
+sumDepthD7$ClustType <- rep("D7",nrow(sumDepthD7))
+sumDepthD12 <- summaryBy(Bottom_Depth ~ detailMPA12, data=env2, FUN=c(range, mean))
+colnames(sumDepthD12) <- c("Cluster","Min Depth","Max Depth","Mean Depth")
+sumDepthD12$ClustType <- rep("D12",nrow(sumDepthD12))
+
+sumDepth <- rbind(sumDepthB5, sumDepthB9, sumDepthB20, sumDepthD5, sumDepthD7, sumDepthD12)
+setwd("C:/OneDrive/C2_Coms/Cluster_Summaries")
+write.csv(sumDepth, file = "12_MERGE_PA_kMeanCluster_Depth_Summary.csv", row.names=FALSE)
+
+
+
+######################################
+#### PRINCIPAL COMPONENT ANALYSIS ####
+######################################
+
+pca <- rda(broadMPA, scale = T)
+summary(pca, display = NULL) # 30% of variation explained by first 2 PC's
+scores(pca, choices = 1:2, display = "species", scaling = 0) # shows how each species is affected by PC1 and PC2
+plot(pca)
+
+pca2 <- rda(detailMPA, scale = T)
+summary(pca2, display = NULL) # 30% of variation explained by first 2 PC's
+scores(pca2, choices = 1:2, display = "species", scaling = 0) # shows how each species is affected by PC1 and PC2
+plot(pca)
+
+```
+
+```{r Summarize Clusters}
+
+
+setwd("C:/OneDrive/C2_Coms/SUBMISSION/Revisions/Data")
+data <- read.csv("Detail_Matrix_Clusters.csv", row.names = 1, head =T)
+
+library(dplR)
+library(dplyr)
+library(plyr)
+st.err <- function(x) {sd(x)/sqrt(length(x))}
+
+data2 <- data[-c(1,2,3)]
+
+summary <- data2 %>% group_by(CLUSTER_DEEP) %>% summarise_all(funs(mean))
+summary_sd <- data2 %>% group_by(CLUSTER_DEEP) %>% summarise_all(funs(sd))
+summary_se <- data2 %>% group_by(CLUSTER_DEEP) %>% summarise_all(funs(st.err))
+
+write.csv(summary, "Cluster_Summary_Mean.csv")
+write.csv(summary_sd, "Cluster_Summary_SD.csv")
+write.csv(summary_se, "Cluster_Summary_SE.csv")
+
+
+# Caluclate Diversity H
+library(vegan)
+setwd("C:/OneDrive/C2_Coms/SUBMISSION/Revisions/Data")
+data3 <- read.csv("Detail_Matrix_Clusters_SUBSTRATE_REMOVED.csv", head = T, row.names = 1)
+data4 <- data3[-c(1:4)]
+H <- diversity(data4)
+data4$diversity <- H
+summary_div <- data3[-c(1:3)] %>% group_by(CLUSTER_DEEP) %>% summarise_all(funs(mean))
+
+
+
+
+pred.vars <- colnames(summary[,c(2:85)])
+
+# Correalation of predictor variables----
+correl <- round(cor(summary[,pred.vars]),2)
+
+# Write csv to examine correlation in detail
+write.csv(correl, "Correlations.csv", row.names = T)
+
+# Check distributions----
+pdf("Cover_distributions.pdf", title = "Predictor variable distributions")
+par(mfrow=c(3,2))
+
+for (i in pred.vars) {
+   x<-summary[ ,i]
+   x = as.numeric(unlist(x))
+   hist((x))#Looks best
+   plot((x),main = paste(i))
+   hist(sqrt(x))
+   plot(sqrt(x))
+   hist(log(x+1))
+   plot(log(x+1))
+ }
+
+dev.off()
+
+# Correlation Coefficient
+
+require(ggpubr)
+require(tidyverse)
+require(Hmisc)
+require(corrplot)
+library(PerformanceAnalytics)
+
+chart.Correlation(summary[2:85], method = "pearson", histogram = FALSE)
+
+# look at what correlations look significant
+correlation <- cor(summary[2:85], method = "pearson")
+correlation
+write.csv(correlation, "Correlation_Coefficient.csv")
+
+positive <- correlation > 0.8
+negative <- correlation < -0.8
+
+write.csv(positive, "Positive_Correlations.csv")
+write.csv(negative, "Negative_Correlations.csv")
+
+
+# Negative: Turf on Reef v Sand
+# Positive: lots
+tot_coral <- cor.test(data$Total_recruits, data$Hard.coral.cover, method = "pearson")
+tot_col <- cor.test(data$Total_recruits, data$Total.colonies, method = "pearson")
+
+
+```
+
+```{r PCA}
+
+# create PCA plots
+
+library(ade4)
+library(factoextra)
+library(magrittr)
+library(ggpubr)
+library(gridExtra)
+library(ecodist)
+library(pvclust)
+library(mclust)
+library(NbClust)
+library(cluster)
+asinTransform <- function(x){
+  asin(sign(x) * sqrt(abs(x)))}
+
+
+# http://www.sthda.com/english/articles/31-principal-component-methods-in-r-practical-guide/112-pca-principal-component-analysis-essentials/
+# http://www.sthda.com/english/wiki/factoextra-r-package-easy-multivariate-data-analyses-and-elegant-visualization 
+# http://www.sthda.com/english/articles/31-principal-component-methods-in-r-practical-guide/119-pca-in-r-using-ade4-quick-scripts/ 
+# http://www.sthda.com/english/wiki/fviz-pca-quick-principal-component-analysis-data-visualization-r-software-and-data-mining
+# https://www.rdocumentation.org/packages/ggpubr/versions/0.1.6/topics/ggpar 
+
+setwd("C:/OneDrive/C2_Coms")
+detail <- read.csv("11_Detail_ALLDATA_Matrix.csv", head = T, row.names = 1)
+detail <- sqrt(detail)
+detail[is.na(detail)] <- 0
+
+setwd("C:/OneDrive/C2_Coms/SUBMISSION/Revisions/Data")
+summary <- read.csv("Cluster_Summary_Mean.csv", row.names = 1, head = T)
+
+# compute PCA
+res.pca <- dudi.pca(summary,
+                    scannf = FALSE)
+# Visualize eigenvalues (scree plot). Show the percentage of variances explained by each principal component. 
+fviz_eig(res.pca)
+
+# correlation plot
+library("corrplot")
+var <- get_pca_var(res.pca)
+corrplot(var$cos2, is.corr=FALSE)
+
+# Total cos2 of variables on Dim.1 and Dim.2
+fviz_cos2(res.pca, choice = "var", axes = 1:2)
+# The cos2 values are used to estimate the quality of the representation
+# The closer a variable is to the circle of correlations, the better its representation on the factor map (and the more important it is to interpret these components)
+# Variables that are closed to the center of the plot are less important for the first components.
+
+# contributions of variables to PCs. The larger the value of the contribution, the more the variable contributes to the component.
+head(var$contrib, 10)
+
+# Contributions of variables to PC1
+fviz_contrib(res.pca, choice = "var", axes = 1, top = 10)
+# Contributions of variables to PC2
+fviz_contrib(res.pca, choice = "var", axes = 2, top = 10)
+# Contributions of variables to both PC1 and PC2
+fviz_contrib(res.pca, choice = "var", axes = 1:2, top = 10)
+# The red dashed line on the graph above indicates the expected average contribution. If the contribution of the variables were uniform, the expected value would be 1/length(variables) = 1/10 = 10%. For a given component, a variable with a contribution larger than this cutoff could be considered as important in contributing to the component.
+# Note that, the total contribution of a given variable, on explaining the variations retained by two principal components, say PC1 and PC2, is calculated as contrib = [(C1 * Eig1) + (C2 * Eig2)]/(Eig1 + Eig2), where
+# C1 and C2 are the contributions of the variable on PC1 and PC2, respectively
+# Eig1 and Eig2 are the eigenvalues of PC1 and PC2, respectively. Recall that eigenvalues measure the amount of variation retained by each PC.
+
+
+# Graph of individuals. Individuals with a similar profile are grouped together.
+ind <- get_pca_ind(res.pca)
+ind
+
+ind.p <- fviz_pca_ind(res.pca,
+             habillage = "none",
+             axes.linetype = "solid",
+             palette = NULL,
+             addEllipses = FALSE, 
+             col.ind = "black", 
+             fill.ind = "white",
+             col.ind.sup = "blue", 
+             alpha.ind = 1, 
+             select.ind = list(name = NULL, cos2 = NULL, contrib = NULL),
+             title = " ",
+             repel = TRUE)
+
+ind_plot<- ggpubr::ggpar(ind.p,
+              xlab = "PC1 (30.8%)", ylab = "PC2 (21.2%)",
+              # xlim = c(-4,4),
+              # ylim = c(-4,4),
+              font.x = c("bold"),
+              font.y = c("bold"),
+              tickslab = FALSE,
+              ticks = FALSE)
+
+setwd("C:/OneDrive/C5_Recruit/Data/Summary")
+tiff(file = "37_PCA_Individuals.tif", width = 6, height = 6, units = 'in', res = 500, compression = 'none')
+ind_plot
+dev.off()
+
+# Graph of variables. Positive correlated variables point to the same side of the plot. Negative correlated variables point to opposite sides of the graph
+var.p <- fviz_pca_var(res.pca,
+             select.var = list(cos2 = 0.25),
+             repel = TRUE,
+             col.var = "black",
+             axes.linetype = "none",
+             col.circle	= "white",
+             title = " ")
+
+var_plot<- ggpubr::ggpar(var.p,
+              ggtheme = theme_void(),
+              xlab = NULL, ylab = NULL,
+              # xlim = c(-1,1),
+              # ylim = c(-1,1),
+              tickslab = FALSE,
+              ticks = FALSE)
+
+setwd("C:/OneDrive/C5_Recruit/Data/Summary")
+tiff(file = "38_PCA_Variables.tif", width = 6, height = 6, units = 'in', res = 500, compression = 'none')
+var_plot
+dev.off()
+
+pca_overlay <- fviz_pca_biplot(res.pca, 
+                # Individuals
+                geom.ind = "point",
+                axes.linetype = "solid",
+                palette = NULL,
+                addEllipses = FALSE, 
+                col.ind = "black", 
+                fill.ind = "white",
+                col.ind.sup = "blue", 
+                alpha.ind = 1, 
+                select.ind = list(name = NULL, cos2 = NULL, contrib = NULL),
+                # Variables
+                select.var = list(cos2 = 0.25),
+                repel = TRUE,
+                col.var = "blue",
+                col.circle	= "white",
+                title = " "
+                )
+setwd("C:/OneDrive/C5_Recruit/Data/Summary")
+tiff(file = "38_PCA_overlay.tif", width = 6, height = 6, units = 'in', res = 500, compression = 'none')
+pca_overlay
+dev.off()
+
+
+```
+
+
+
+
+
